@@ -14,9 +14,15 @@
     "tutorial",
     "demo"
   ],
+  "dependencies": {
+    "fs-extra": "^6.0.1",
+    "request": "^2.87.0",
+    "request-progress": "^3.0.0"
+  },
   "author": "GitHub",
   "license": "CC0-1.0",
   "devDependencies": {
-    "electron": "^2.0.0"
+    "electron": "^2.0.0",
+    "electron-packager": "^12.1.0"
   }
 }
