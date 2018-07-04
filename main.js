@@ -105,6 +105,7 @@ if (isSecondInstance) {
 let tray = null
 app.on('ready', () => {
     //dialog.showMessageBox( { message : process.execPath + " " + process.argv.join(" ") } );
+
     //console.log(process.execPath, process.argv);
     tray = new Tray('searchbox_button.png')
     const contextMenu = Menu.buildFromTemplate([
@@ -118,6 +119,12 @@ app.on('ready', () => {
     tray.on('click', () => {
         mainWindow.show();
     })
+})
+
+process.on('uncaughtException', function (error) {
+    // Handle the error
+    dialog.showErrorBox("出现错误，程序退出", error.stack || "");
+    app.exit(-2);
 })
 
 // app.commandLine.appendSwitch('remote-debugging-port', '9222');

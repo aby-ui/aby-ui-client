@@ -1,3 +1,4 @@
 node_modules
 package-lock.json
 *-win32-x64
+.idea/workspace.xml
