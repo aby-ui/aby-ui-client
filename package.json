@@ -4,7 +4,11 @@
   "description": "A minimal Electron application",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dev": "electron-webpack dev",
+    "compile": "electron-webpack",
+    "dist": "yarn compile && electron-builder",
+    "dist:dir": "yarn dist --dir -c.compression=store -c.mac.identity=null"
   },
   "repository": "https://github.com/electron/electron-quick-start",
   "keywords": [
@@ -17,12 +21,19 @@
   "dependencies": {
     "fs-extra": "^6.0.1",
     "request": "^2.87.0",
-    "request-progress": "^3.0.0"
+    "request-progress": "^3.0.0",
+    "source-map-support": "^0.5.5"    
   },
   "author": "GitHub",
   "license": "CC0-1.0",
   "devDependencies": {
     "electron": "^2.0.0",
-    "electron-packager": "^12.1.0"
+    "electron-packager": "^12.1.0",
+    "electron-builder": "^20.11.1",    
+    "electron-webpack": "^2.1.2",
+    "webpack": "^4.8.1"
+  },
+  "resolutions": {
+    "webpack-sources": "1.0.1"
   }
 }
