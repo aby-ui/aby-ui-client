@@ -106,12 +106,12 @@ let packageJson = null
 
 // by warbaby
 const originalFs = require('original-fs')
-let updateAsar = path.join(process.resourcesPath, 'app-new.asar')
+let updateAsar = path.join(process.resourcesPath, 'app-updated.asar')
 let appAsar = path.join(process.resourcesPath, 'app.asar')
 if(originalFs.existsSync(appAsar) && originalFs.existsSync(updateAsar)) {
     originalFs.unlinkSync(appAsar);
     originalFs.renameSync(updateAsar, appAsar);
-    console.log("find app-new.asar, renamed");
+    console.log("find app-updated.asar, successfully renamed.");
 }
 
 const searchPaths = ['app', 'app.asar', 'default_app.asar']

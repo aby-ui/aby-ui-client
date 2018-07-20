@@ -1,33 +1,11 @@
 // Modules to control application life and create native browser window
-const {app, BrowserWindow, Menu, Tray, dialog} = require('electron');
-
-const request = require('request');
-const fs = require('fs-extra');
-const progress = require('request-progress');
-
+const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain} = require('electron');
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow;
 let child;
 
-//https://stackoverflow.com/questions/18323152/get-download-progress-in-node-js-with-request
-// let url = 'https://raw.githubusercontent.com/WeakAuras/WeakAuras2/8.0-beta8/WeakAurasModelPaths/ModelPaths.lua'
-// let url = 'https://rawcdn.githack.com/WeakAuras/WeakAuras2/8.0-beta8/WeakAurasModelPaths/ModelPaths.lua'
-let url = 'https://codeload.github.com/WeakAuras/WeakAuras2/zip/master'
-// let url = 'https://rawcdn.githack.com/warbaby/testzip/17d00448333f1e11a4d551c5b1937bc8baa92286/1.zip'
-/*
-progress(request(url))
-        .on('progress', state => {
-            console.log(state);
-            if(state.percent!=null) mainWindow.setProgressBar(state.percent);
-        })
-        .on('end', () => { console.log('done'); mainWindow.setProgressBar(1); })
-        .on('error', err => console.log(err))
-        .pipe(fs.createWriteStream('big.lua'))
-*/
-
-const {ipcMain} = require('electron')
 ipcMain.on('asynchronous-message', (event, arg) => {
     console.log(arg); // prints "ping"
     event.sender.send('asynchronous-reply', 'pong2')
@@ -38,18 +16,130 @@ ipcMain.on('synchronous-message', (event, arg) => {
     a++;
     mainWindow.setProgressBar(a / 100);
     console.log(arg) // prints "ping"
-    event.returnValue = dialog.showOpenDialog({ title: '选择魔兽执行文件', properties: ['openDirectory'], filters: [ { name: 'exe', extensions: ['exe'] }]}) || 'null';
+    event.returnValue = dialog.showOpenDialog({
+        title: '选择魔兽执行文件',
+        properties: ['openDirectory'],
+        filters: [{name: 'exe', extensions: ['exe']}]
+    }) || 'null';
     //event.returnValue = a;
 })
 
-function createWindow () {
+let lastPromptRestart = 0;
+
+function showRestartDialog() {
+    if (Date.now() - lastPromptRestart < 10 * 60 * 1000) return;
+    if (Notification.isSupported()) {
+        let notification = new Notification({
+            title: '发现新版更新器',
+            subtitle: 'test',
+            body: '已经下载，请重启',
+        });
+        notification.show();
+    }
+
+    let button = dialog.showMessageBox({
+        title: "重启更新器",
+        message: "更新器已在后台下载完毕，重启即可生效，是否确认？",
+        type: 'question',
+        buttons: ["重启", "稍后"], defaultId: 0, cancelId: 1
+    });
+
+    lastPromptRestart = Date.now();
+    if (button === 0) {
+        app.relaunch({execPath: process.execPath, args: process.argv.slice(1).concat(['--relaunch'])});
+        app.exit(0);
+    }
+}
+
+async function checkUpdateAsar() {
+    const path = require('path');
+    const fs = require('fs-extra');
+
+    const {downloadRetry, getGitRawUrl} = require('./utils');
+
+    let releaseJsonUrl = (gitUser, gitRepo, gitHash) => (file, retry) => {
+        if (retry < 2) {
+            return getGitRawUrl('gitlab', false, gitUser, gitRepo, gitHash, file); //官方稳定，但不能续传
+        } else if (retry < 3) {
+            return getGitRawUrl('bitbucket', false, gitUser, gitRepo, gitHash, file); //官方能续传，但限制访问
+        } else if (retry < 5) {
+            return getGitRawUrl('github', false, gitUser, gitRepo, gitHash, file); //hack不限量，不能续传
+        } else {
+            return undefined;
+        }
+    };
+
+    let fileToGitRaw = (gitUser, gitRepo, gitHash) => (file, retry) => {
+        if (retry < 2) {
+            return getGitRawUrl('gitlab', false, gitUser, gitRepo, gitHash, file); //官方稳定，但不能续传
+        } else if (retry < 4) {
+            return getGitRawUrl('bitbucket', true, gitUser, gitRepo, gitHash, file); //hack不限量，能续传
+        } else if (retry < 5) {
+            return getGitRawUrl('gitlab', true, gitUser, gitRepo, gitHash, file); //hack不限量，不能续传
+        } else {
+            return undefined;
+        }
+    };
+
+    function streamPromise(stream, value) {
+        return new Promise((resolve, reject) => {
+            stream.on('finish', () => resolve(value));
+            stream.on('error', reject);
+        })
+    }
+
+    let dataPath = path.join(path.dirname(process.execPath) + '/data');
+    let releaseJsonPath = path.join(dataPath, 'abyui-release.json');
+    let releaseJsonTmp = releaseJsonPath + '.remote';
+    let gzPath = path.join(process.resourcesPath, 'app.asar.gz');
+    let asarPath = path.join(process.resourcesPath, 'app-updated.asar');
+
+    let current = await fs.pathExists(releaseJsonPath).then(() => fs.readJSON(releaseJsonPath)).catch(() => undefined);
+
+    console.log('checking update');
+    downloadRetry('abyui-release.json', releaseJsonTmp, releaseJsonUrl('aby-ui', 'repo-release', 'master'))
+        .then(() => fs.readJSON(releaseJsonTmp))
+        .then((remote) => {
+            if (!current || current.client.hash !== remote.client.hash) {
+                console.log('downloading new client', remote.client.hash);
+                return downloadRetry('appv2.asar.gz', gzPath, fileToGitRaw('aby-ui', 'repo-release', remote.client.hash));
+            }
+        })
+        .then((r) => {
+            if (r) {
+                console.log('downloaded', r);
+                let stream = fs.createReadStream(gzPath).pipe(require('zlib').createGunzip()).pipe(require('original-fs').createWriteStream(asarPath));
+                return streamPromise(stream, r);
+            }
+        })
+        .then((r) => {
+            if (r) {
+                return fs.remove(releaseJsonPath)
+                    .then(() => fs.rename(releaseJsonPath + '.remote', releaseJsonPath))
+                    .then(() => {
+                        console.log('update success');
+                        showRestartDialog();
+                        return r;
+                    })
+            }
+        })
+        .then((r) => {
+            if (!r && fs.pathExistsSync(asarPath)) {
+                showRestartDialog();
+            }
+        })
+        .catch(e => console.error(e))
+        .then(() => setTimeout(checkUpdateAsar, 5 * 60 * 1000));
+}
+
+function createWindow() {
     // Create the browser window.
     mainWindow = new BrowserWindow({width: 800, height: 600, frame: true});
     // child = new BrowserWindow({modal:true, parent: mainWindow});
 
-    mainWindow.webContents.openDevTools();
+    //mainWindow.webContents.openDevTools();
 
-    mainWindow.webContents.on('did-finish-load', function() {
+    mainWindow.webContents.on('did-finish-load', function () {
         mainWindow.setProgressBar(0);
     });
 
@@ -57,7 +147,6 @@ function createWindow () {
     mainWindow.loadFile('index.html');
 
     // child.loadFile('index.html');
-
 
     // Open the DevTools.
     // mainWindow.webContents.openDevTools()
@@ -77,12 +166,12 @@ function createWindow () {
     mainWindow.on('close', (e) => {
         console.log('on close prevent');
         mainWindow.hide();
-        // e.preventDefault();
+        e.preventDefault();
     })
 
     mainWindow.on('minimize', () => {
         console.log("minimized")
-        //mainWindow.hide();
+        mainWindow.hide();
     })
 }
 
@@ -106,13 +195,26 @@ let tray = null
 app.on('ready', () => {
     //dialog.showMessageBox( { message : process.execPath + " " + process.argv.join(" ") } );
 
+    setTimeout(checkUpdateAsar, 1000);
+
     //console.log(process.execPath, process.argv);
-    tray = new Tray('searchbox_button.png')
+    let trayIcon = require('path').join(process.resourcesPath,'/searchbox_button.png');
+    console.log(trayIcon);
+    tray = new Tray(trayIcon)
     const contextMenu = Menu.buildFromTemplate([
-                                                   {label: 'Item1', type: 'normal'},
-                                                   {label: '重启', type: 'normal', click: () => { app.relaunch({execPath : 'aaa.bat', args: process.argv.slice(1).concat(['--relaunch'])}); app.exit(0); }},
-                                                   {label: '退出', type: 'normal', click: () => { app.exit(0) }}
-                                               ])
+        {label: 'Item1', type: 'normal'},
+        {
+            label: '重启', type: 'normal', click: () => {
+                app.relaunch({execPath: 'aaa.bat', args: process.argv.slice(1).concat(['--relaunch'])});
+                app.exit(0);
+            }
+        },
+        {
+            label: '退出', type: 'normal', click: () => {
+                app.exit(0)
+            }
+        }
+    ])
     tray.setToolTip('This is my application.')
     tray.setContextMenu(contextMenu)
 
