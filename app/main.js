@@ -88,7 +88,7 @@ let checkUpdateAsar
 
         let dataPath = path.join(path.dirname(process.execPath) + '/data');
         let releaseJsonPath = path.join(dataPath, 'abyui-release.json');
-        let releaseJsonTmp = releaseJsonPath + '.remote';
+        let releaseRemote = releaseJsonPath + '.remote';
 
         let verElec = process.versions.electron;
         let verApp = app.getVersion(), verLib = fs.readJsonSync(libPath + '/package.json').version;
@@ -97,8 +97,8 @@ let checkUpdateAsar
         console.log('checking update', verElec, 'app', verApp, 'lib', verLib);
 
         // 以下这一串里面，需要处理 1.不需要更新 2.需要更新并下载了 3.需要更新但之前下载过了 4.异常，所以要一直传递一个是不是需要更新的标记
-        downloadRetry('abyui-release.json', releaseJsonTmp, releaseJsonUrl('aby-ui', 'repo-release', 'master'))
-            .then(() => fs.readJSON(releaseJsonTmp))
+        downloadRetry('abyui-release.json', releaseRemote, releaseJsonUrl('aby-ui', 'repo-release', 'master'))
+            .then(() => fs.readJSON(releaseRemote))
             .then((remote) => {
                 // 如果当前electron比远程要求的electron版本要低，则不更新，提示错误
                 if (compare(verElec, remote.client.electron) < 0) {
@@ -117,12 +117,12 @@ let checkUpdateAsar
                 if (compare(verApp, remote.client.app.version) < 0) {
                     console.log('downloading new app.asar.gz', remote.client.app.version);
                     promises.push(downloadRetry('app.asar.gz', path.join(process.resourcesPath, 'app.asar.gz'), (file, retry) => remote.client.app.urls[retry]));
-                    updated.push('app.asar');
+                    updated.push('app');
                 }
                 if (compare(verLib, remote.client.lib.version) < 0) {
                     console.log('downloading new lib.asar.gz', remote.client.lib.version);
                     promises.push(downloadRetry('lib.asar.gz', path.join(process.resourcesPath, 'lib.asar.gz'), (file, retry) => remote.client.lib.urls[retry]));
-                    updated.push('lib.asar');
+                    updated.push('lib');
                 }
                 if (promises.length > 0) {
                     return Promise.all(promises).then(() => updated);
@@ -137,22 +137,28 @@ let checkUpdateAsar
                 console.log('release json downloaded', r);
                 let promises = [];
                 for (let file of r) {
-                    let stream = fs.createReadStream(file + '.asar.gz').pipe(require('zlib').createGunzip()).pipe(require('original-fs').createWriteStream(file + '-updated.asar'));
+                    let stream = fs.createReadStream(path.join(process.resourcesPath, file + '.asar.gz'))
+                        .pipe(require('zlib').createGunzip())
+                        .pipe(require('original-fs').createWriteStream(path.join(process.resourcesPath, file + '-updated.asar')));
                     promises.push(streamPromise(stream));
                 }
-                Promise.all(promises).then(() => r)
+                return Promise.all(promises).then(() => r)
             })
             .then(() => {
                 // 如果有客户端新文件，则提示重启
                 if (fs.pathExistsSync(path.join(process.resourcesPath, 'app-updated.asar'))
                     || fs.pathExistsSync(path.join(process.resourcesPath, 'lib-updated.asar'))) {
                     showRestartDialog();
+                } else {
+                    console.log('no updated file created');
                 }
                 setTimeout(checkUpdateAsar, CHECK_INTERVAL)
             })
             .catch(e => {
                 console.error(e)
                 //如果任何一步失败，则删除两个文件，否则可能造成不一致
+                fs.removeSync(path.join(process.resourcesPath, 'app-updated.asar'));
+                fs.removeSync(path.join(process.resourcesPath, 'lib-updated.asar'));
                 setTimeout(checkUpdateAsar, RETRY_INTERVAL)
             });
     }
