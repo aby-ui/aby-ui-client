@@ -1,5 +1,12 @@
 // Modules to control application life and create native browser window
 const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain} = require('electron');
+
+process.on('uncaughtException', function (error) {
+    // Handle the error
+    dialog.showErrorBox("出现错误，程序退出", error.stack || "");
+    app.exit(-2);
+})
+
 const path = require('path');
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -145,7 +152,7 @@ function createWindow() {
     //mainWindow.webContents.openDevTools();
 
     mainWindow.webContents.on('did-finish-load', function () {
-        mainWindow.setProgressBar(0);
+        if(mainWindow) mainWindow.setProgressBar(0);
     });
 
     // and load the index.html of the app.
@@ -196,10 +203,14 @@ if (isSecondInstance) {
     app.quit()
 }
 
+
 let tray = null
 app.on('ready', () => {
     //dialog.showMessageBox( { message : process.execPath + " " + process.argv.join(" ") } );
-    let decompress = require(path.join(process.resourcesPath, 'lib.asar/node_modules/decompress'));
+    console.log(require('fs-extra').readJsonSync("c:\\code\\electron\\electron-quick-start\\_build\\app-lib.asar\\package.json").version);
+    console.log(app.getVersion());
+    if(true) process.exit(0);
+    let decompress = require(path.join(process.resourcesPath, 'app-lib.asar/node_modules/decompress'));
     decompress("C:\\code\\lua\\163ui.beta\\fetch-merge.libs\\fm\\AceGUI-3.0-SharedMediaWidgets\\AceGUI-3.0-SharedMediaWidgets-r37.zip", path.join(process.resourcesPath, 'ttt'))
 
     setTimeout(checkUpdateAsar, 1000);
@@ -228,12 +239,6 @@ app.on('ready', () => {
     tray.on('click', () => {
         mainWindow.show();
     })
-})
-
-process.on('uncaughtException', function (error) {
-    // Handle the error
-    dialog.showErrorBox("出现错误，程序退出", error.stack || "");
-    app.exit(-2);
 })
 
 // app.commandLine.appendSwitch('remote-debugging-port', '9222');
