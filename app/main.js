@@ -1,4 +1,5 @@
 'use strict'
+const debugging = true;
 
 const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain} = require('electron');
 const path = require('path'), fs = require('fs-extra')
@@ -77,7 +78,7 @@ let checkUpdateAsar
         let vers = {app: app.getVersion(), lib: fs.readJsonSync(libPath + '/package.json').version};
         const compare = require('compare-versions');
 
-        vers = {app: "1.0.1", lib: "1.0.1"};
+        //vers = {app: "1.0.1", lib: "1.0.1"};
         console.log('checking update', verElec, vers);
 
         // 以下这一串里面，需要处理 1.不需要更新 2.需要更新 3.异常，所以要一直传递一个标记。后来不传了，用updated文件是否存在来判断
@@ -154,17 +155,28 @@ let checkUpdateAsar
 // ------------------------------------------------------------------------------------------
 function createWindow() {
     // Create the browser window.
-    mainWindow = new BrowserWindow({width: 800, height: 600, frame: true});
+    mainWindow = new BrowserWindow({
+        width: 800,
+        height: 600,
+        frame: true,
+        resizable: false,
+        closable: debugging,
+        webPreferences : {
+            nodeIntegration: true,
+            contextIsolation: false,
+            preload: __dirname + '/renderer/preload.js'
+        }
+    });
 
     // Open the DevTools.
-    // mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools();
 
     mainWindow.webContents.on('did-finish-load', function () {
         if (mainWindow) mainWindow.setProgressBar(0);
     });
 
     // and load the index.html of the app.
-    mainWindow.loadFile('index.html');
+    mainWindow.loadFile('renderer/index.html');
 
     // 窗口关闭时触发，通过preventDefault可以阻止
     mainWindow.on('close', (e) => {
@@ -174,7 +186,7 @@ function createWindow() {
         // mainWindow = null //正常应该是设置为null, 当全部窗口都关闭时，程序退出
         // 仅仅隐藏窗口，阻止默认事件执行close()
         mainWindow.hide();
-        e.preventDefault();
+        if(!debugging) e.preventDefault();
         console.log('on close prevent');
     })
 
@@ -224,7 +236,7 @@ app.on('ready', () => {
     if (isSecondInstance) return;
     //testElectron();
 
-    setTimeout(checkUpdateAsar, 1000);
+    if(!debugging) setTimeout(checkUpdateAsar, 1000);
 
     createWindow();
 })
@@ -245,6 +257,10 @@ app.on('activate', function () {
     if (mainWindow === null) {
         createWindow()
     }
+});
+
+app.on('browser-window-created', function (e, window) {
+    window.setMenu(null);
 });
 
 // ------------------------------------------------------------------------------------------

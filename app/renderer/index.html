@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>爱不易（原网易有爱）插件更新器</title>
+    <link href="./bootstrap.min.css" rel="stylesheet">
+    <style>
+        .show-grid {
+            margin-bottom: 15px;
+        }
+
+        .show-grid [class^="col-"] {
+            padding-top: 10px;
+            padding-bottom: 10px;
+            background-color: #eee;
+            background-color: rgba(86, 61, 124, .15);
+            border: 1px solid #ddd;
+            border: 1px solid rgba(86, 61, 124, .2);
+        }
+    </style>
+</head>
+<body style="margin: 10px; overflow: hidden; height: 600px">
+
+<div class="container">
+    <div class="row show-grid">
+        <div class="col-xs-4">
+            <div class="progress">
+                <div class="progress-bar" role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100"
+                     style="width: 60%;">
+                    <span class="sr-only">60% Complete</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-xs-4">One third</div>
+        <div class="col-xs-4">One third</div>
+    </div>
+    <div class="row show-grid">
+        <div class="col-xs-4">
+            <div class="progress">
+                <div id="progress1" class="progress-bar progress-bar-striped active" role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100"
+                     style="width: 60%;">
+                    <span class="sr-only">60% Complete</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-xs-4">One third</div>
+        <div class="col-xs-4">One third</div>
+    </div>
+</div>
+<h1>Hello World! I'm V1</h1>
+<!-- All of the Node.js APIs are available in this renderer process. -->
+We are using Node.js
+<script>document.write(process.versions.node)</script>
+,
+Chromium
+<script>document.write(process.versions.chrome)</script>
+,
+and Electron
+<script>document.write(process.versions.electron)</script>
+.
+
+<p>
+    <button onclick="send()">CLICK ME</button>
+</p>
+
+<script>
+    (function () {
+        var holder = document.body;
+
+        holder.ondragover = () => {
+            return false;
+        };
+
+        holder.ondragleave = () => {
+            return false;
+        };
+
+        holder.ondragend = () => {
+            return false;
+        };
+
+        holder.ondrop = (e) => {
+            e.preventDefault();
+
+            for (let f of e.dataTransfer.files) {
+                console.log('File(s) you dragged here: ', f.path)
+            }
+
+            return false;
+        };
+    })();
+</script>
+
+<script>
+    window.$ = window.jQuery = require('./jquery.min.js');
+
+    // You can also require other files to run in this process
+    require('./renderer.js');
+
+    const {ipcRenderer} = require('electron');
+
+    var i=0;
+    ipcRenderer.on('asynchronous-reply', (event, arg) => {
+        $('#progress1').css('width', (i+=10)+'%');
+        console.log(arg) // prints "pong"
+    });
+
+    function send() {
+        console.log(ipcRenderer.sendSync('synchronous-message', 'ping'));
+        ipcRenderer.send('asynchronous-message', 'ping22')
+    }
+</script>
+
+<script src="./jquery.min.js"></script>
+<script src="./bootstrap.min.js"></script>
+<div class="form-group">
+    <a href="wa.zip" target="_NEW" class="btn btn-default btn-lg active">WeakAuras插件本体</a>
+    <a href="sounds.zip" class="btn btn-default btn-lg active">M阿古斯声音文件</a>
+    <a href="bubble.zip" class="btn btn-default btn-lg active">缩小聊天泡泡的材质,解压到WOW目录</a>
+</div>
+
+<script>
+    $.get('file:///c:/code/electron/aby-ui-client/app.asar/package.json', (data) => {
+        console.log(data)
+    })
+</script>
+<!--<script src="file:///c:/code/electron/aby-ui-client/app.asar/main.js"></script>-->
+</body>
+</html>
