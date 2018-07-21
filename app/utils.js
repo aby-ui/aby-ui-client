@@ -1,8 +1,8 @@
 'use strict'
 
 const fs = require('fs-extra'),
-        path = require('path'),
-        URL = require('url')
+    path = require('path'),
+    URL = require('url')
 
 /**
  * @param url
@@ -13,94 +13,105 @@ const fs = require('fs-extra'),
 function download(url, dest, options) {
     options = options || {}
     const progress = options.progress || options
-            , parsedUrl = URL.parse(url)
+        , parsedUrl = URL.parse(url)
 
     return new Promise((resolve, reject) => {
-        fs.stat(dest, (err, stat) => {
-            if (err && err.code !== 'ENOENT')
-                return reject({error: err, reason: 'fstat-error', info: err.code})
+            fs.stat(dest, (err, stat) => {
+                if (err && err.code !== 'ENOENT')
+                    return reject({error: err, reason: 'fstat-error', info: err.code, url: url})
 
-            let start = (stat && stat.size && !options.noResume) ? stat.size : 0
+                let start = (stat && stat.size && !options.noResume) ? stat.size : 0
 
-            // 已下载的字节数，包括断点续传的，下载失败后要回退
-            let downloaded = 0;
-            let rejectRevertDownloaded = (data) => {
-                typeof progress === 'function' && progress(-1, -1, -downloaded);
-                downloaded = 0; //嵌套的错误可能减去多次
-                return reject(data);
-            }
+                // 已下载的字节数，包括断点续传的，下载失败后要回退
+                let downloaded = 0;
+                let rejectRevertDownloaded = (data) => {
+                    typeof progress === 'function' && progress(-1, -1, -downloaded);
+                    downloaded = 0; //嵌套的错误可能减去多次
+                    return reject(data);
+                }
 
-            const req = require(parsedUrl.protocol.slice(0, -1)).request(Object.assign({
-                                                                                           method: options.method || 'GET',
-                                                                                           headers: Object.assign({Range: 'bytes=' + start + '-'}, options.headers)
-                                                                                       }, parsedUrl), res => {
-                options.onresponse && options.onresponse(res)
+                const req = require(parsedUrl.protocol.slice(0, -1)).request(Object.assign({
+                    method: options.method || 'GET',
+                    headers: Object.assign({Range: 'bytes=' + start + '-'}, options.headers)
+                }, parsedUrl), res => {
+                    options.onresponse && options.onresponse(res)
 
-                //if (res.statusCode === 416 && res.headers['content-range'] && res.headers['content-range'].slice(-2) !== '/0')
-                //    return fs.unlink(dest, () => resolve(download(url, dest, options)))
+                    if (res.statusCode === 416) {  //&& res.headers['content-range'] && res.headers['content-range'].slice(-2) !== '/0')
+                        return fs.unlink(dest, () => resolve(download(url, dest, options)))
+                    }
 
-                if (res.statusCode >= 400)
-                    return reject({
-                                      error: new Error('Response:' + res.statusCode),
-                                      reason: 'response-code',
-                                      info: res.statusCode
-                                  })
+                    if (res.statusCode >= 400) {
+                        return reject({
+                            error: new Error('Response:' + res.statusCode),
+                            reason: 'response-code',
+                            info: res.statusCode,
+                            url: url
+                        })
+                    }
 
-                if (res.headers.location)
-                    return reject({
-                                      error: new Error('Redirect:' + res.statusCode + ', ' + res.headers.location),
-                                      reason: 'response-redirect',
-                                      info: res.statusCode
-                                  })
+                    if (res.headers.location) {
+                        return reject({
+                            error: new Error('Redirect:' + res.statusCode + ', ' + res.headers.location),
+                            reason: 'response-redirect',
+                            info: res.statusCode,
+                            url: url
+                        })
+                    }
 
-                if (!res.headers['content-range'])
-                    start = 0
+                    if (!res.headers['content-range'])
+                        start = 0
 
-                const file = fs.createWriteStream(dest, {
-                    flags: start ? 'r+' : 'w',
-                    start
-                })
+                    const file = fs.createWriteStream(dest, {
+                        flags: start ? 'r+' : 'w',
+                        start
+                    })
 
-                file.on('error', e => {
-                    rejectRevertDownloaded({error: e, reason: 'stream-error'})
-                    req.abort()
-                })
+                    file.on('error', e => {
+                        req.abort()
+                        rejectRevertDownloaded({error: e, reason: 'stream-error', url: url})
+                    })
 
-                const length = parseInt(res.headers['content-length'], 10) || 0;
+                    const length = parseInt(res.headers['content-length'], 10) || 0;
 
-                downloaded = start
-                typeof progress === 'function' && progress(downloaded, (length + start), downloaded);
+                    downloaded = start
+                    typeof progress === 'function' && progress(downloaded, (length + start), downloaded);
 
-                res.on('data', chunk => {
-                    downloaded += chunk.length
-                    //if(downloaded > 30000 && url.indexOf('glcdn') < 0) req.abort();
-                    typeof progress === 'function' && progress(downloaded, (length + start), chunk.length);
-                    file.write(chunk)
-                })
+                    res.on('data', chunk => {
+                        downloaded += chunk.length
+                        //if(downloaded > 30000 && url.indexOf('glcdn') < 0) req.abort();
+                        typeof progress === 'function' && progress(downloaded, (length + start), chunk.length);
+                        file.write(chunk)
+                    })
 
-                res.on('end', () => file.end())
-                file.on('finish', () =>
+                    res.on('end', () => file.end())
+                    file.on('finish', () =>
                         res.complete
-                                ? resolve(url)
-                                : rejectRevertDownloaded({
-                                                             error: new Error('IncompleteResponse'),
-                                                             reason: 'response-incomplete'
-                                                         })
-                )
+                            ? resolve(url)
+                            : rejectRevertDownloaded({
+                                error: new Error('IncompleteResponse'),
+                                reason: 'response-incomplete',
+                                url: url
+                            })
+                    )
+                })
+
+                options.onrequest && options.onrequest(req)
+
+                req.on('error', e => rejectRevertDownloaded({error: e, reason: 'request-error', url: url}))
+                req.on('timeout', () => {
+                    req.abort();
+                    rejectRevertDownloaded({error: new Error('RequestTimeout'), reason: 'request-timeout', url: url});
+                })
+                req.on('abort', () => rejectRevertDownloaded({
+                    error: new Error('RequestAborted'),
+                    reason: 'request-abort',
+                    url: url
+                }))
+                req.setTimeout((options.timeout || 30) * 1000)
+                req.end()
             })
-
-            options.onrequest && options.onrequest(req)
-
-            req.on('error', e => rejectRevertDownloaded({error: e, reason: 'request-error'}))
-            req.on('timeout', () => (req.abort(), rejectRevertDownloaded({
-                                                                             error: new Error('RequestTimeout'),
-                                                                             reason: 'request-timeout'
-                                                                         })))
-            req.on('abort', () => rejectRevertDownloaded({error: new Error('RequestAborted'), reason: 'request-abort'}))
-            req.setTimeout((options.timeout || 30) * 1000)
-            req.end()
-        })
-    })
+        }
+    )
 }
 
 /**
@@ -114,29 +125,30 @@ function download(url, dest, options) {
  */
 function downloadRetry(fileOrUrl, dest, mapOrRetry, onprogress) {
     return new Promise((resolve) => {
-                           fs.ensureDir(path.dirname(dest))
-                                   .then(() => {
-                                       let p = Promise.reject('start');
-                                       for (let i = 0; true; i++) {
-                                           let url;
-                                           if (typeof mapOrRetry === 'function') {
-                                               url = mapOrRetry(fileOrUrl, i);
-                                           } else {
-                                               url = i < mapOrRetry ? fileOrUrl : undefined;
-                                           }
-                                           if (!url) break;
-                                           p = p.catch((e) => {
-                                               //如果是磁盘问题则不重试，其实都重试也没什么问题
-                                               if (e.reason !== 'fstat-error' && e.reason !== 'stream-error') {
-                                                   //每次重试时使用不同的url，第一次不尝试断点续传
-                                                   if (i > 0) console.log(i === 0 ? 'download' : 'retry', fileOrUrl, i);
-                                                   return download(url, dest, {noResume: i === 0, timeout: 10, progress: onprogress});
-                                               }
-                                           })
-                                       }
-                                       resolve(p);
-                                   });
-                       }
+            fs.ensureDir(path.dirname(dest))
+                .then(() => {
+                    let p = Promise.reject('start');
+                    for (let i = 0; true; i++) {
+                        let url;
+                        if (typeof mapOrRetry === 'function') {
+                            url = mapOrRetry(fileOrUrl, i);
+                        } else {
+                            url = i < mapOrRetry ? fileOrUrl : undefined;
+                        }
+                        if (!url) break;
+                        p = p.catch((e) => {
+                            //如果是磁盘问题则不重试，其实都重试也没什么问题
+                            if (e.reason !== 'fstat-error' && e.reason !== 'stream-error') {
+                                //每次重试时使用不同的url，第一次不尝试断点续传
+                                if (i > 0) console.error(e.error);
+                                console.log(i === 0 ? 'download' : 'retry', fileOrUrl, i, url);
+                                return download(url, dest, {noResume: i === 0, timeout: 10, progress: onprogress});
+                            }
+                        })
+                    }
+                    resolve(p);
+                });
+        }
     )
 }
 
@@ -162,11 +174,11 @@ function downloadList(files, saveDir, fileToUrlFunc, onDataDelta, onFileFinish) 
         if (!file) return null;
         let dest = path.join(saveDir, file);
         return downloadRetry(file, dest, fileToUrlFunc, onprogress)
-                .then(() => [file, true])
-                .catch((e) => {
-                    console.error(`cannot download ${file}`, e.error);
-                    return [file, false]
-                });
+            .then(() => [file, true])
+            .catch((e) => {
+                console.error(`cannot download ${file}`, e.error);
+                return [file, false]
+            });
     };
 
     const PromisePool = require('es6-promise-pool');

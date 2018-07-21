@@ -1,0 +1,3 @@
+<component name="DependencyValidationManager">
+  <scope name="src" pattern="file[electron-quick-start]:app//*&amp;&amp;!file[electron-quick-start]:*" />
+</component>
