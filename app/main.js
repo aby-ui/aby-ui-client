@@ -9,7 +9,8 @@ process.on('uncaughtException', function (error) {
     process.exit(-2);
 })
 
-const libPath = path.join(process.resourcesPath, 'lib.asar');
+const getRes = file => path.join(process.resourcesPath, file);
+const libPath = getRes('lib.asar');
 const requireLib = (module) => require(path.join(libPath, 'node_modules', module));
 
 // Keep a global reference of the window object, if you don't, the window will
@@ -86,17 +87,17 @@ let checkUpdateAsar
             })
         }
 
-        let dataPath = path.join(path.dirname(process.execPath) + '/data');
-        let releaseJsonPath = path.join(dataPath, 'abyui-release.json');
-        let releaseRemote = releaseJsonPath + '.remote';
+        let releaseRemote = getRes('data/abyui-release.json.remote');
 
+        //当前版本
         let verElec = process.versions.electron;
-        let verApp = app.getVersion(), verLib = fs.readJsonSync(libPath + '/package.json').version;
+        let vers = {app: app.getVersion(), lib: fs.readJsonSync(libPath + '/package.json').version};
         const compare = require('compare-versions');
 
-        console.log('checking update', verElec, 'app', verApp, 'lib', verLib);
+        //vers = { app: "1.0.1", lib: "1.0.1" };
+        console.log('checking update', verElec, vers);
 
-        // 以下这一串里面，需要处理 1.不需要更新 2.需要更新并下载了 3.需要更新但之前下载过了 4.异常，所以要一直传递一个是不是需要更新的标记
+        // 以下这一串里面，需要处理 1.不需要更新 2.需要更新 3.异常，所以要一直传递一个标记。后来不传了，用updated文件是否存在来判断
         downloadRetry('abyui-release.json', releaseRemote, releaseJsonUrl('aby-ui', 'repo-release', 'master'))
             .then(() => fs.readJSON(releaseRemote))
             .then((remote) => {
@@ -113,41 +114,42 @@ let checkUpdateAsar
                 //TODO: 比较插件版本，提示web，插件更新成功后才保存release-json为新的，这里不用保存，直接用version判断即可
 
                 let promises = [];
-                let updated = []; //用于返回给解压步骤，也可以在downloadRetry后面加then，然后Promise.all应该会自动组装
-                if (compare(verApp, remote.client.app.version) < 0) {
-                    console.log('downloading new app.asar.gz', remote.client.app.version);
-                    promises.push(downloadRetry('app.asar.gz', path.join(process.resourcesPath, 'app.asar.gz'), (file, retry) => remote.client.app.urls[retry]));
-                    updated.push('app');
+                //一个小循环，防止写两遍
+                for (let part of ['app', 'lib']) {
+                    let remoteVer = remote.client[part].version;
+                    //版本低于远程版本则尝试更新
+                    if (compare(vers[part], remoteVer) < 0) {
+                        let gzFile = getRes(part + '-v' + remoteVer + '.gz');
+                        //文件不存在则下载后改名，已经存在直接解压
+                        let prom = Promise.resolve();
+                        if (!fs.existsSync(gzFile)) {
+                            console.log('downloading new', part, remoteVer);
+                            let temp = getRes(part + '.downloading');
+                            prom = downloadRetry(part + '.asar.gz', temp, (file, retry) => remote.client[part].urls[retry])
+                                .then(() => fs.rename(temp, gzFile))
+                        }
+                        //解压
+                        prom = prom
+                            .then(() => {
+                                let stream = fs.createReadStream(gzFile)
+                                    .pipe(require('zlib').createGunzip())
+                                    .pipe(require('original-fs').createWriteStream(getRes(part + '-updated.asar')));
+                                return streamPromise(stream);
+                            })
+                            .then(() => part);
+                        promises.push(prom);
+                    }
                 }
-                if (compare(verLib, remote.client.lib.version) < 0) {
-                    console.log('downloading new lib.asar.gz', remote.client.lib.version);
-                    promises.push(downloadRetry('lib.asar.gz', path.join(process.resourcesPath, 'lib.asar.gz'), (file, retry) => remote.client.lib.urls[retry]));
-                    updated.push('lib');
-                }
+
                 if (promises.length > 0) {
-                    return Promise.all(promises).then(() => updated);
+                    return Promise.all(promises);
                 } else {
                     console.log('no need to update client')
-                    //不需要更新，所以后面的r都是undefined
                 }
             })
             .then((r) => {
-                // 解压文件，上一步结果是 ['app', 'lib'], 如果解压成功则透传
-                if (!r) return r;
-                console.log('release json downloaded', r);
-                let promises = [];
-                for (let file of r) {
-                    let stream = fs.createReadStream(path.join(process.resourcesPath, file + '.asar.gz'))
-                        .pipe(require('zlib').createGunzip())
-                        .pipe(require('original-fs').createWriteStream(path.join(process.resourcesPath, file + '-updated.asar')));
-                    promises.push(streamPromise(stream));
-                }
-                return Promise.all(promises).then(() => r)
-            })
-            .then(() => {
                 // 如果有客户端新文件，则提示重启
-                if (fs.pathExistsSync(path.join(process.resourcesPath, 'app-updated.asar'))
-                    || fs.pathExistsSync(path.join(process.resourcesPath, 'lib-updated.asar'))) {
+                if (fs.pathExistsSync(getRes('app-updated.asar')) || fs.pathExistsSync(getRes('lib-updated.asar'))) {
                     showRestartDialog();
                 } else {
                     console.log('no updated file created');
@@ -157,8 +159,8 @@ let checkUpdateAsar
             .catch(e => {
                 console.error(e)
                 //如果任何一步失败，则删除两个文件，否则可能造成不一致
-                fs.removeSync(path.join(process.resourcesPath, 'app-updated.asar'));
-                fs.removeSync(path.join(process.resourcesPath, 'lib-updated.asar'));
+                fs.removeSync(getRes('app-updated.asar'));
+                fs.removeSync(getRes('lib-updated.asar'));
                 setTimeout(checkUpdateAsar, RETRY_INTERVAL)
             });
     }
