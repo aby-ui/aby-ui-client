@@ -9,6 +9,8 @@ process.on('uncaughtException', function (error) {
     process.exit(-2);
 })
 
+// app.commandLine.appendSwitch('remote-debugging-port', '9222');
+
 const getRes = file => path.join(process.resourcesPath, file);
 const libPath = getRes('lib.asar');
 const requireLib = (module) => require(path.join(libPath, 'node_modules', module));
@@ -16,25 +18,6 @@ const requireLib = (module) => require(path.join(libPath, 'node_modules', module
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow;
-
-ipcMain.on('asynchronous-message', (event, arg) => {
-    console.log(arg); // prints "ping"
-    event.sender.send('asynchronous-reply', 'pong2')
-});
-
-let a = 0;
-ipcMain.on('synchronous-message', (event, arg) => {
-    a++;
-    mainWindow.setProgressBar(a / 100);
-    console.log(arg) // prints "ping"
-    event.returnValue = dialog.showOpenDialog({
-        title: '选择魔兽执行文件',
-        properties: ['openDirectory'],
-        filters: [{name: 'exe', extensions: ['exe']}]
-    }) || 'null';
-    //event.returnValue = a;
-});
-
 
 // ------------------------------------------------------------------------------------------
 // -- 定时检查app版本更新, 检查完毕后，每5分钟检查一次，检查失败每2分钟检查意思
@@ -94,7 +77,7 @@ let checkUpdateAsar
         let vers = {app: app.getVersion(), lib: fs.readJsonSync(libPath + '/package.json').version};
         const compare = require('compare-versions');
 
-        //vers = { app: "1.0.1", lib: "1.0.1" };
+        vers = {app: "1.0.1", lib: "1.0.1"};
         console.log('checking update', verElec, vers);
 
         // 以下这一串里面，需要处理 1.不需要更新 2.需要更新 3.异常，所以要一直传递一个标记。后来不传了，用updated文件是否存在来判断
@@ -166,6 +149,9 @@ let checkUpdateAsar
     }
 })();
 
+// ------------------------------------------------------------------------------------------
+// -- 初始化窗口，加载页面
+// ------------------------------------------------------------------------------------------
 function createWindow() {
     // Create the browser window.
     mainWindow = new BrowserWindow({width: 800, height: 600, frame: true});
@@ -196,6 +182,27 @@ function createWindow() {
     mainWindow.on('minimize', () => {
         mainWindow.hide();
     })
+
+    let trayIcon = path.join(__dirname, 'tray_icon.png');
+    let tray = new Tray(trayIcon)
+    const contextMenu = Menu.buildFromTemplate([
+        {label: '爱不易插件', sublabel: 'aby-ui'},
+        {type: 'separator'},
+        {
+            label: '重启', type: 'normal', click: () => {
+                app.relaunch();
+                app.exit(0);
+            }
+        },
+        {
+            label: '退出', type: 'normal', click: () => {
+                app.exit(0)
+            }
+        }
+    ])
+    tray.setToolTip('爱不易插件更新器')
+    tray.setContextMenu(contextMenu)
+    tray.on('click', () => mainWindow.show());
 }
 
 const isSecondInstance = app.makeSingleInstance(() => {
@@ -207,44 +214,21 @@ const isSecondInstance = app.makeSingleInstance(() => {
         mainWindow.show();
     }
 })
-if (isSecondInstance) app.quit()
-
-let tray = null
-app.on('ready', () => {
-
-    //testElectron();
-
-    setTimeout(checkUpdateAsar, 1000);
-
-    let trayIcon = path.join(__dirname, 'searchbox_button.png');
-    console.log(trayIcon);
-    tray = new Tray(trayIcon)
-    const contextMenu = Menu.buildFromTemplate([
-        {label: 'Item1', type: 'normal'},
-        {
-            label: '重启', type: 'normal', click: () => {
-                app.relaunch({execPath: 'aaa.bat', args: process.argv.slice(1).concat(['--relaunch'])});
-                app.exit(0);
-            }
-        },
-        {
-            label: '退出', type: 'normal', click: () => {
-                app.exit(0)
-            }
-        }
-    ])
-    tray.setToolTip('This is my application.')
-    tray.setContextMenu(contextMenu)
-
-    tray.on('click', () => {
-        mainWindow.show();
-    })
-})
+if (isSecondInstance) app.exit(-1)
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', () => {
+
+    if (isSecondInstance) return;
+    //testElectron();
+
+    setTimeout(checkUpdateAsar, 1000);
+
+    createWindow();
+})
+
 
 // Quit when all windows are closed.
 app.on('window-all-closed', function () {
@@ -263,7 +247,26 @@ app.on('activate', function () {
     }
 });
 
-// app.commandLine.appendSwitch('remote-debugging-port', '9222');
+// ------------------------------------------------------------------------------------------
+// -- 界面事件
+// ------------------------------------------------------------------------------------------
+ipcMain.on('asynchronous-message', (event, arg) => {
+    console.log(arg); // prints "ping"
+    event.sender.send('asynchronous-reply', 'pong2')
+});
+
+let a = 0;
+ipcMain.on('synchronous-message', (event, arg) => {
+    a++;
+    mainWindow.setProgressBar(a / 100);
+    console.log(arg) // prints "ping"
+    event.returnValue = dialog.showOpenDialog({
+        title: '选择魔兽执行文件',
+        properties: ['openDirectory'],
+        filters: [{name: 'exe', extensions: ['exe']}]
+    }) || 'null';
+    //event.returnValue = a;
+});
 
 async function testElectron() {
     let topWindow = new BrowserWindow({modal: true, show: false, alwaysOnTop: false, parent: mainWindow}); //alwaysOnTop会在其他应用的上面
