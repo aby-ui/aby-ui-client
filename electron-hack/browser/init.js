@@ -113,6 +113,13 @@ if(originalFs.existsSync(appAsar) && originalFs.existsSync(updateAsar)) {
     originalFs.renameSync(updateAsar, appAsar);
     console.log("find app-updated.asar, successfully renamed.");
 }
+updateAsar = path.join(process.resourcesPath, 'lib-updated.asar')
+appAsar = path.join(process.resourcesPath, 'lib.asar')
+if(originalFs.existsSync(appAsar) && originalFs.existsSync(updateAsar)) {
+    originalFs.unlinkSync(appAsar);
+    originalFs.renameSync(updateAsar, appAsar);
+    console.log("find lib-updated.asar, successfully renamed.");
+}
 
 const searchPaths = ['app', 'app.asar', 'default_app.asar']
 for (packagePath of searchPaths) {

@@ -1,5 +1,6 @@
 // Modules to control application life and create native browser window
 const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain} = require('electron');
+const path = require('path'), fs = require('fs-extra')
 
 process.on('uncaughtException', function (error) {
     // Handle the error
@@ -7,7 +8,9 @@ process.on('uncaughtException', function (error) {
     app.exit(-2);
 })
 
-const path = require('path');
+const libPath = path.join(process.resourcesPath, 'lib.asar');
+const requireLib = (module) => require(path.join(libPath, 'node_modules', module));
+
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow, topWindow;
@@ -59,8 +62,6 @@ function showRestartDialog() {
 }
 
 async function checkUpdateAsar() {
-    const path = require('path');
-    const fs = require('fs-extra');
 
     const {downloadRetry, getGitRawUrl} = require('./utils');
 
@@ -71,18 +72,6 @@ async function checkUpdateAsar() {
             return getGitRawUrl('bitbucket', false, gitUser, gitRepo, gitHash, file); //官方能续传，但限制访问
         } else if (retry < 5) {
             return getGitRawUrl('github', false, gitUser, gitRepo, gitHash, file); //hack不限量，不能续传
-        } else {
-            return undefined;
-        }
-    };
-
-    let fileToGitRaw = (gitUser, gitRepo, gitHash) => (file, retry) => {
-        if (retry < 2) {
-            return getGitRawUrl('gitlab', false, gitUser, gitRepo, gitHash, file); //官方稳定，但不能续传
-        } else if (retry < 4) {
-            return getGitRawUrl('bitbucket', true, gitUser, gitRepo, gitHash, file); //hack不限量，能续传
-        } else if (retry < 5) {
-            return getGitRawUrl('gitlab', true, gitUser, gitRepo, gitHash, file); //hack不限量，不能续传
         } else {
             return undefined;
         }
@@ -103,13 +92,16 @@ async function checkUpdateAsar() {
 
     let current = await fs.pathExists(releaseJsonPath).then(() => fs.readJSON(releaseJsonPath)).catch(() => undefined);
 
-    console.log('checking update');
+    let verElec = process.versions.electron;
+    let verApp = app.getVersion(), verLib = fs.readJsonSync(libPath + '/package.json').version;
+
+    console.log('checking update', verElec, 'app', verApp, 'lib', verLib);
     downloadRetry('abyui-release.json', releaseJsonTmp, releaseJsonUrl('aby-ui', 'repo-release', 'master'))
         .then(() => fs.readJSON(releaseJsonTmp))
         .then((remote) => {
             if (!current || current.client.hash !== remote.client.hash) {
                 console.log('downloading new client', remote.client.hash);
-                return downloadRetry('appv2.asar.gz', gzPath, fileToGitRaw('aby-ui', 'repo-release', remote.client.hash));
+                return downloadRetry('app.asar.gz', gzPath, (file, retry) => remote.client.app.urls[retry]);
             }
         })
         .then((r) => {
@@ -152,7 +144,7 @@ function createWindow() {
     //mainWindow.webContents.openDevTools();
 
     mainWindow.webContents.on('did-finish-load', function () {
-        if(mainWindow) mainWindow.setProgressBar(0);
+        if (mainWindow) mainWindow.setProgressBar(0);
     });
 
     // and load the index.html of the app.
@@ -206,16 +198,11 @@ if (isSecondInstance) {
 
 let tray = null
 app.on('ready', () => {
-    //dialog.showMessageBox( { message : process.execPath + " " + process.argv.join(" ") } );
-    console.log(require('fs-extra').readJsonSync("c:\\code\\electron\\electron-quick-start\\_build\\app-lib.asar\\package.json").version);
-    console.log(app.getVersion());
-    if(true) process.exit(0);
-    let decompress = require(path.join(process.resourcesPath, 'app-lib.asar/node_modules/decompress'));
-    decompress("C:\\code\\lua\\163ui.beta\\fetch-merge.libs\\fm\\AceGUI-3.0-SharedMediaWidgets\\AceGUI-3.0-SharedMediaWidgets-r37.zip", path.join(process.resourcesPath, 'ttt'))
+
+    testElectron();
 
     setTimeout(checkUpdateAsar, 1000);
 
-    //console.log(process.execPath, process.argv);
     let trayIcon = path.join(__dirname, 'searchbox_button.png');
     console.log(trayIcon);
     tray = new Tray(trayIcon)
@@ -265,5 +252,11 @@ app.on('activate', function () {
     }
 });
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
+async function testElectron() {
+    dialog.showMessageBox( { message : 'hello' } );
+    console.log(fs.readJsonSync(libPath + '/package.json').version);
+    console.log(app.getVersion());
+    await (requireLib('decompress'))("C:\\code\\lua\\163ui.beta\\fetch-merge.libs\\fm\\AceGUI-3.0-SharedMediaWidgets\\AceGUI-3.0-SharedMediaWidgets-r37.zip", path.join(process.cwd(), '..', 'ttt'));
+    console.log(process.execPath, process.cwd());
+    if(true) process.exit(0);
+}
