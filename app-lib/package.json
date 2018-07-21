@@ -1,0 +1,13 @@
+{
+  "name": "app-lib.asar",
+  "version": "1.0.0",
+  "description": "app-lib.asar",
+  "main": "main.js",
+  "dependencies": {
+    "decompress": "^4.2.0",
+    "iconv-lite": "^0.4.23"
+  },
+  "optionalDependencies": {
+    "regedit": "^3.0.0"
+  }
+}

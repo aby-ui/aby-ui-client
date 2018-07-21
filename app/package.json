@@ -8,11 +8,9 @@
   },
   "repository": "https://github.com/electron/electron-quick-start",
   "dependencies": {
-    "decompress": "^4.2.0",
     "es6-promise-pool": "^2.5.0",
     "fs-extra": "^6.0.1",
     "klaw-sync": "^4.0.0",
-    "iconv-lite": "^0.4.23",
     "md5-file": "^4.0.0"
   },
   "optionalDependencies": {
@@ -20,7 +18,7 @@
   },
   "author": "warbaby",
   "devDependencies": {
-    "electron": "^2.0.0",
-    "electron-packager": "^12.1.0"
+    "@types/fs-extra": "^5.0.4",
+    "@types/node": "^10.5.2"
   }
 }

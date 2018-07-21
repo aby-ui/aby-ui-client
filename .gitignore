@@ -1,4 +1,8 @@
-node_modules
+app/node_modules
+app-lib/node_modules
+electron-package/node_modules
+electron-dist
 package-lock.json
-*-win32-x64
+_build
+_package
 .idea/workspace.xml

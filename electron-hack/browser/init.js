@@ -115,7 +115,6 @@ if(originalFs.existsSync(appAsar) && originalFs.existsSync(updateAsar)) {
 }
 
 const searchPaths = ['app', 'app.asar', 'default_app.asar']
-
 for (packagePath of searchPaths) {
   try {
     packagePath = path.join(process.resourcesPath, packagePath)

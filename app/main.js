@@ -1,9 +1,9 @@
 // Modules to control application life and create native browser window
 const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain} = require('electron');
-
+const path = require('path');
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
-let mainWindow;
+let mainWindow, topWindow;
 let child;
 
 ipcMain.on('asynchronous-message', (event, arg) => {
@@ -37,8 +37,8 @@ function showRestartDialog() {
         notification.show();
     }
 
-    let button = dialog.showMessageBox({
-        title: "重启更新器",
+    let button = dialog.showMessageBox(mainWindow, {
+        title: "爱不易更需要重启",
         message: "更新器已在后台下载完毕，重启即可生效，是否确认？",
         type: 'question',
         buttons: ["重启", "稍后"], defaultId: 0, cancelId: 1
@@ -128,14 +128,19 @@ async function checkUpdateAsar() {
                 showRestartDialog();
             }
         })
-        .catch(e => console.error(e))
-        .then(() => setTimeout(checkUpdateAsar, 5 * 60 * 1000));
+        .then(() => setTimeout(checkUpdateAsar, 5 * 60 * 1000))
+        .catch(e => {
+            console.error(e)
+            setTimeout(checkUpdateAsar, 2 * 60 * 1000)
+        });
 }
 
 function createWindow() {
     // Create the browser window.
     mainWindow = new BrowserWindow({width: 800, height: 600, frame: true});
     // child = new BrowserWindow({modal:true, parent: mainWindow});
+
+    topWindow = new BrowserWindow({modal: true, show: false, alwaysOnTop: false, parent: mainWindow}); //alwaysOnTop会在其他应用的上面
 
     //mainWindow.webContents.openDevTools();
 
@@ -194,11 +199,13 @@ if (isSecondInstance) {
 let tray = null
 app.on('ready', () => {
     //dialog.showMessageBox( { message : process.execPath + " " + process.argv.join(" ") } );
+    let decompress = require(path.join(process.resourcesPath, 'lib.asar/node_modules/decompress'));
+    decompress("C:\\code\\lua\\163ui.beta\\fetch-merge.libs\\fm\\AceGUI-3.0-SharedMediaWidgets\\AceGUI-3.0-SharedMediaWidgets-r37.zip", path.join(process.resourcesPath, 'ttt'))
 
     setTimeout(checkUpdateAsar, 1000);
 
     //console.log(process.execPath, process.argv);
-    let trayIcon = require('path').join(process.resourcesPath,'/searchbox_button.png');
+    let trayIcon = path.join(__dirname, 'searchbox_button.png');
     console.log(trayIcon);
     tray = new Tray(trayIcon)
     const contextMenu = Menu.buildFromTemplate([
