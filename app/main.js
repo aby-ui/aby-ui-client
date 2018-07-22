@@ -169,7 +169,7 @@ function createWindow() {
     });
 
     // Open the DevTools.
-    mainWindow.webContents.openDevTools();
+    // mainWindow.webContents.openDevTools();
 
     mainWindow.webContents.on('did-finish-load', function () {
         if (mainWindow) mainWindow.setProgressBar(0);
