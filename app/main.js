@@ -1,5 +1,6 @@
 'use strict'
 const debugging = true;
+let GIT_USER = 'aby-ui';
 
 const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain} = require('electron');
 const path = require('path'), fs = require('fs-extra')
@@ -82,7 +83,7 @@ let checkUpdateAsar
         console.log('checking update', verElec, vers);
 
         // 以下这一串里面，需要处理 1.不需要更新 2.需要更新 3.异常，所以要一直传递一个标记。后来不传了，用updated文件是否存在来判断
-        downloadRetry('abyui-release.json', releaseRemote, releaseJsonUrl('aby-ui', 'repo-release', 'master'))
+        downloadRetry('abyui-release.json', releaseRemote, releaseJsonUrl(GIT_USER, 'repo-release', 'master'))
             .then(() => fs.readJSON(releaseRemote))
             .then((remote) => {
                 // 如果当前electron比远程要求的electron版本要低，则不更新，提示错误
@@ -147,6 +148,85 @@ let checkUpdateAsar
                 fs.removeSync(getRes('lib-updated.asar'));
                 setTimeout(checkUpdateAsar, RETRY_INTERVAL)
             });
+    }
+})();
+
+function getAddOnDir() {
+
+}
+
+let downloadRepo;
+(function() {
+
+    const {downloadRetry, getGitRawUrl} = require('./utils');
+
+    let fileToGitRaw = (gitUser, gitRepo, gitHash) => (file, retry) => {
+        if (retry < 2) {
+            return getGitRawUrl('gitlab', false, gitUser, gitRepo, gitHash, file); //官方稳定，但不能续传
+        } else if (retry < 4) {
+            return getGitRawUrl('bitbucket', true, gitUser, gitRepo, gitHash, file); //hack不限量，能续传
+        } else if (retry < 5) {
+            return getGitRawUrl('gitlab', true, gitUser, gitRepo, gitHash, file); //hack不限量，不能续传
+        } else {
+            return undefined;
+        }
+    };
+
+    downloadRepo = async function(repo, hash) {
+        console.log('======================= downloading repo', repo);
+
+        //下载成功然后改名
+        let savePath = getRes(`data/filelist-${repo}-${hash}.gz`);
+
+        if (!fs.existsSync(savePath)) {
+            let bytes = 0;
+            try {
+                await downloadRetry('.filelist.php', savePath + '.tmp', fileToGitRaw(GIT_USER, repo, hash), delta => console.log('downloaded', bytes += delta));
+                console.log('list file downloaded');
+                fs.renameSync(savePath + '.tmp', savePath);
+            } catch (e) {
+                return console.error('无法获取插件变更信息', e);
+            }
+        } else {
+            console.log('use former downloaded');
+        }
+
+        let addonDir = path.join('./data/', 'Interface/AddOns');
+
+        fs.ensureDirSync(addonDir);
+
+        let remote = futil.readJsonGZ(savePath);
+        let local = futil.buildFileList(addonDir, [], false, true);
+        let result = futil.calcDiff(remote, local, addonDir);
+
+        //先删除文件
+        result.deleted.forEach(file => {
+            fs.removeSync(path.join(addonDir, file))
+        });
+
+        let downloads = result.modified.concat(result.added);
+        let downloadsCount = downloads.length;
+        let downloadsBytes = result.bytes.modified + result.bytes.added;
+        let totalBytes = result.bytes.total;
+        console.log("FILE need to download:", downloadsCount, ', BYTES:', downloadsBytes + ' / ' + totalBytes);
+
+        let before = process.uptime() * 1000;
+        let bytesDownloaded = 0;
+        let onDataDelta = (delta) => {
+            bytesDownloaded += delta;
+            //console.log(`bytesDownloaded: ${bytesDownloaded} / ${downloadsBytes}`)
+        };
+        let onFileFinish = (file, success, finished, total) => {
+            console.log(finished + ' / ' + total, '    ', bytesDownloaded + ' / ' + downloadsBytes);
+        };
+        await downloadList(downloads, addonDir, fileToGitRaw(GIT_USER, repo, hash), onDataDelta, onFileFinish);
+
+        console.log("downloaded", bytesDownloaded, ', time:', process.uptime() * 1000 - before);
+
+        local = futil.buildFileList(addonDir, [], false, true);
+        result = futil.calcDiff(remote, local); //仅比较文件尺寸即可
+        let remained = result.modified.length + result.added.length;
+        console.log(remained > 0 ? '更新不完全' : '更新成功');
     }
 })();
 
