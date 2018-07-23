@@ -3,5 +3,6 @@
   <component name="Encoding">
     <file url="file://$PROJECT_DIR$/build-app-lib.bat" charset="GBK" />
     <file url="file://$PROJECT_DIR$/build-app.bat" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/build-electron.bat" charset="GBK" />
   </component>
 </project>

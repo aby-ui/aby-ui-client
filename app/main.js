@@ -488,6 +488,8 @@ function onAppReady() {
     setTimeout(checkUpdateAsar, 1000);
     createWindow();
 
+    dialog.showMessageBox(mainWindow, {message: app.getVersion() });
+
     mainWindow.webContents.once('did-finish-load', () => {
         updateReleaseData();
     });
@@ -553,7 +555,12 @@ function EventMain(event, method, arg1) {
                                         || content.indexOf('\n## X-163UI-Version:') >= 0;
                                     console.log('see if should remove', one, isOurs);
                                     if (isOurs) {
-                                        fs.removeSync(path.join(addOnDir, one));
+                                        const backupDir = path.join(addOnDir, '..', 'AddOns爱不易备份');
+                                        fs.ensureDirSync(backupDir)
+                                        const target = path.join(backupDir, one);
+                                        if(fs.existsSync(target)) fs.removeSync(target);
+                                        fs.moveSync(path.join(addOnDir, one), target)
+                                        //fs.removeSync(path.join(addOnDir, one));
                                     }
                                 }
                             }
