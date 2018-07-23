@@ -19,7 +19,7 @@ const requireLib = (module) => require(path.join(libPath, 'node_modules', module
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
-let mainWindow;
+let mainWindow, tray;
 
 function exitApp(code) {
     mainWindow = null;
@@ -411,15 +411,14 @@ function createWindow() {
         // Dereference the window object, usually you would store windows
         // in an array if your app supports multi windows, this is the time
         // when you should delete the corresponding element.
-        // mainWindow = null //正常应该是设置为null, 当全部窗口都关闭时，程序退出
         // 仅仅隐藏窗口，阻止默认事件执行close()
         mainWindow.hide();
-        if (!debugging) e.preventDefault();
+        if (!debugging) e.preventDefault(); else mainWindow = null; //正常应该是设置为null, 当全部窗口都关闭时，程序退出
         console.log('on close prevent');
     })
 
     let trayIcon = path.join(__dirname, 'tray_icon.png');
-    let tray = new Tray(trayIcon)
+    tray = new Tray(trayIcon)
     const contextMenu = Menu.buildFromTemplate([
         {label: '爱不易插件', sublabel: 'aby-ui'},
         {type: 'separator'},
