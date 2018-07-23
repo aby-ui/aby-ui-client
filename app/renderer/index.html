@@ -9,11 +9,9 @@
             background-color: #eee;
             border: 1px solid #ddd;
         }
-
         #mainCt .row {
             margin: 10px -40px 10px -40px;
         }
-
     </style>
 </head>
 <body style="overflow: hidden; height: 600px">
@@ -23,7 +21,7 @@
         <div class="col-xs-2" align="left">
             <button type="button" class="btn btn-primary" onclick="javascript:fire('GetWowPath')">魔兽目录</button>
         </div>
-        <div class="col-xs-8">
+        <div class="col-xs-8" style="margin-top: 6px">
             <span id="spanWowPath" style="font-size: 14px;"></span>
         </div>
         <div class="col-xs-2" align="right">
@@ -32,10 +30,10 @@
     </div>
     <div class="row">
         <div class="col-xs-2" align="left">
-            <button type="button" class="btn btn-primary disabled">更新插件</button>
+            <button id="btnUpdate" type="button" class="btn btn-primary" disabled>更新插件</button>
         </div>
         <div class="col-xs-8" style="margin-top: 6px">
-            <span style="font-size: 16px;">请先选择魔兽世界目录</span>
+            <span id="spanUpdateInfo" style="font-size: 12px;"></span>
         </div>
         <div class="col-xs-2" align="right">
             <button type="button" class="btn btn-primary">详细检查</button>
@@ -104,6 +102,11 @@
         switch (event) {
             case 'GetWowPathDone': {
                 return $('#spanWowPath').text(arg1);
+            }
+            case 'SetUpdateInfo': {
+                console.log(event, arg1, arg2)
+                $('#spanUpdateInfo').text(arg1);
+                $('#btnUpdate').attr('disabled', !arg2);
             }
         }
     });

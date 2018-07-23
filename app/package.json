@@ -19,8 +19,8 @@
   },
   "author": "warbaby",
   "devDependencies": {
-    "@types/electron": "^1.6.10",
     "@types/fs-extra": "^5.0.4",
-    "@types/node": "^10.5.2"
+    "@types/node": "^10.5.2",
+    "electron": "^2.0.5"
   }
 }

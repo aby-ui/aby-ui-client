@@ -21,13 +21,6 @@ const requireLib = (module) => require(path.join(libPath, 'node_modules', module
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow;
 
-//runJs(`$("#spanWowPath").html(decodeURI("${encodeURI(wowPath)}"))`);
-function runJs(js, callback) {
-    if (mainWindow && mainWindow.webContents) {
-        mainWindow.webContents.executeJavaScript(js, callback);
-    }
-}
-
 //发送ABYUI_RENDER事件
 function fire() {
     if (mainWindow && mainWindow.webContents) {
@@ -58,6 +51,37 @@ if (fs.existsSync(localJsonPath)) {
 
 function saveLocalData() {
     fs.writeJsonSync(localJsonPath, localData);
+}
+
+// 更新器下载的临时文件
+let releaseData; //最后一次读取到的更新数据
+let releaseRemote = getRes('data/abyui-release.json.remote');
+
+function updateReleaseData() {
+    if (fs.existsSync(releaseRemote)) {
+        try {
+            releaseData = fs.readJsonSync(releaseRemote);
+        } catch (e) {
+        }
+    }
+    checkUpdateAddOn();
+    return releaseData;
+}
+
+// ------------------------------------------------------------------------------------------
+// -- 插件更新事件
+// ------------------------------------------------------------------------------------------
+function checkUpdateAddOn() {
+    let wowPath = getAddOnDir();
+    if (!wowPath) {
+        return fire('SetUpdateInfo', '请先选择魔兽世界目录', false);
+    }
+    if (!releaseData) {
+        return fire('SetUpdateInfo', '尚未取得新版本信息', false);
+    } else {
+        //TODO 比较版本
+        return fire('SetUpdateInfo', '发现新版本，更新时间 2018-07-23 10:30', true);
+    }
 }
 
 // ------------------------------------------------------------------------------------------
@@ -111,8 +135,6 @@ let checkUpdateAsar
             })
         }
 
-        let releaseRemote = getRes('data/abyui-release.json.remote');
-
         //当前版本
         let verElec = process.versions.electron;
         let vers = {app: app.getVersion(), lib: fs.readJsonSync(libPath + '/package.json').version};
@@ -122,8 +144,10 @@ let checkUpdateAsar
         console.log('checking update', verElec, vers);
 
         // 以下这一串里面，需要处理 1.不需要更新 2.需要更新 3.异常，所以要一直传递一个标记。后来不传了，用updated文件是否存在来判断
-        downloadRetry('abyui-release.json', releaseRemote, releaseJsonUrl(GIT_USER, 'repo-release', 'master'))
-            .then(() => fs.readJSON(releaseRemote))
+        downloadRetry('abyui-release.json', releaseRemote + ".downloading", releaseJsonUrl(GIT_USER, 'repo-release', 'master'))
+            .then(() => fs.remove(releaseRemote))
+            .then(() => fs.rename(releaseRemote + ".downloading", releaseRemote))
+            .then(() => updateReleaseData())
             .then((remote) => {
                 // 如果当前electron比远程要求的electron版本要低，则不更新，提示错误
                 if (compare(verElec, remote.client.electron) < 0) {
@@ -209,17 +233,21 @@ function getAddOnDir(manual) {
 
     //TODO regedit win32
 
-    if (!wowPath && manual) {
+    if (manual) {
         while (true) {
             let chosen = dialog.showOpenDialog(mainWindow, {
                 title: '选择魔兽执行文件',
                 properties: ['openFile'],
+                defaultPath: wowPath,
                 filters: [{name: 'Wow', extensions: ['exe']}]
             })
             if (!chosen) break;
             let dir = path.dirname(chosen[0]);
             if (_isWowPathVaid(dir)) {
                 wowPath = dir;
+                localData.currWowPath = wowPath;
+                saveLocalData();
+                checkUpdateAddOn();
                 break;
             } else {
                 dialog.showMessageBox(mainWindow, {title: '选择无效', type: 'warning', message: '目录下没有 Wow.exe 文件，请重新选择!'});
@@ -228,13 +256,8 @@ function getAddOnDir(manual) {
     }
 
     if (wowPath) {
-        // 界面选择的，则保存到配置文件
-        if(manual) {
-            localData.currWowPath = wowPath;
-            saveLocalData();
-        }
         fire('GetWowPathDone', wowPath);
-         return path.resolve(path.join(wowPath, 'Interface/AddOns'));
+        return path.resolve(path.join(wowPath, 'Interface/AddOns'));
     }
 }
 
@@ -394,15 +417,19 @@ if (isSecondInstance) app.exit(-1)
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', () => {
-
+function onAppReady() {
     if (isSecondInstance) return;
     //testElectron();
 
-    getAddOnDir();
-    if (!debugging) setTimeout(checkUpdateAsar, 1000);
+    if(!debugging) setTimeout(checkUpdateAsar, 1000);
     createWindow();
-})
+
+    mainWindow.webContents.once('did-finish-load', () => {
+        updateReleaseData();
+    });
+}
+
+app.on('ready', onAppReady)
 
 
 // Quit when all windows are closed.
