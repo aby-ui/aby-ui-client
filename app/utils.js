@@ -213,9 +213,9 @@ module.exports = {
 // -- fileUtils
 // ------------------------------------------------------------------------------------------
 const zlib = require('zlib');
-const klawSync = require('klaw-sync');
-const md5File = require('md5-file');
-const { net } = require('electron');
+const klaw = require('klaw');
+const md5File = require('md5-file/promise');
+const {net} = require('electron');
 
 // 获取md5的前4个字节
 let getPartialMD5 = function (rightMD5) {
@@ -237,14 +237,11 @@ let normalizePath = function (onepath) {
  * @param listEmptyDir 是否列出空目录，例如 'dir' : {}
  */
 function buildFileList(base, ignored, calcMd5, listEmptyDir) {
-    let fileCount = 0;
-    let root = {}, pathMap = {}; //记录已经用过的目录对象
-    ignored = (ignored || []).map(normalizePath);
 
     let deep = function (relative, isFile) {
         if (relative === '.') return root;
         if (pathMap[relative]) return pathMap[relative];
-        // if (ignored.indexOf(normalizePath(relative)) >= 0) return null; //已经在klawSync里处理过了，这一步可以去掉
+        // if (ignored.indexOf(normalizePath(relative)) >= 0) return null; //已经在klaw里处理过了，这一步可以去掉
         let parent = deep(path.dirname(relative)); //先创建父目录
         // if (parent === null) return null;
         if (isFile) return parent;
@@ -254,34 +251,54 @@ function buildFileList(base, ignored, calcMd5, listEmptyDir) {
         return dir;
     };
 
-    const paths = klawSync(base, {
-        nodir: false, //nodir:true的话不会遍历目录
-        filter: f => {
-            if (path.basename(f.path)[0] === '.') return false; //以.开头的文件及目录
-            if (ignored.indexOf(normalizePath(path.relative(base, f.path))) >= 0) return false; //配置文件里ignored
-            if (f.stats.isFile() && f.stats.size === 0) return false;
-            //TODO: 只保留lua, toc, xml, tga, blp, ogg, mp3, m2, ttf, 但用压缩包下载的可能会下到
-            return true;
-        }
-    });
+    let root = {}, pathMap = {}; //记录已经用过的目录对象
+    ignored = (ignored || []).map(normalizePath);
 
-    paths.forEach(r => {
-        let p = r.path;
-        let relative = path.relative(base, p);
-        if (r.stats.isDirectory()) {
-            //目录靠目录里的文件来体现，如果目录里没有文件，则不会出现在文件列表里,除非指定listEmptyDir
-            if (listEmptyDir) deep(relative);
-            return;
-        }
-        let parent = deep(relative, true);
-        if (parent !== null) {
-            fileCount++;
-            let md5 = calcMd5 ? md5File.sync(r.path) : '00000000000000000000000000000000';
-            parent[path.basename(r.path)] = [r.stats.size, getPartialMD5(md5)];
-        }
-    });
+    let klawFilter = item => {
+        if (path.basename(item.path)[0] === '.') return false; //以.开头的文件及目录
+        if (ignored.indexOf(normalizePath(path.relative(base, item.path))) >= 0) return false; //配置文件里ignored
+        if (item.stats.isFile() && item.stats.size === 0) return false;
+        //TODO: 只保留lua, toc, xml, tga, blp, ogg, mp3, m2, ttf, 但用压缩包下载的可能会下到
+        return true;
+    };
 
-    return root;
+    return new Promise(resolve => {
+        let promises = [];
+        klaw(base, {nodir: false})
+            .on('data', item => {
+                if (!klawFilter(item)) {
+                    return;
+                }
+                promises.push(new Promise((resolve2, reject2) => {
+                    let p = item.path;
+                    let relative = path.relative(base, p);
+                    if (item.stats.isDirectory()) {
+                        //目录靠目录里的文件来体现，如果目录里没有文件，则不会出现在文件列表里,除非指定listEmptyDir
+                        if (listEmptyDir) deep(relative);
+                        return resolve2();
+                    }
+                    let parent = deep(relative, true);
+                    if (parent !== null) {
+                        if (calcMd5) {
+                            return md5File(item.path).then(md5 => {
+                                parent[path.basename(item.path)] = [item.stats.size, getPartialMD5(md5)]
+                                resolve2();
+                            });
+                        } else {
+                            parent[path.basename(item.path)] = [item.stats.size, 0]
+                            return resolve2();
+                        }
+                    }
+                    return resolve2();
+                }));
+            })
+            .on('end', () => {
+                Promise.all(promises).then(() => resolve(root))
+            });
+
+        return root;
+    })
+
 }
 
 function writeJsonGZ(path, object) {
@@ -320,8 +337,8 @@ let flatTree = function (dir, pathArray, result) {
  * @param local 本地插件目录生成的filelist，可以不包含md5，但是需要包含空目录，防止目录名和文件名冲突
  * @return {modified: Array, deleted: Array, added: Array, bytes: {total: any, added: (*), modified: (*)}} 其中deleted可能存在目录及目录中的文件，真实删除时可能已经被删除掉了
  */
-function calcDiff(remote, local, localPathForMD5) {
-    if (!local) local = buildFileList(localPathForMD5, [], false, true);
+async function calcDiff(remote, local, localPathForMD5) {
+    if (!local) local = await buildFileList(localPathForMD5, [], false, true);
     let rootActual = local.files ? local.files : local;
     let rootExpect = remote.files ? remote.files : remote;
 
@@ -329,7 +346,7 @@ function calcDiff(remote, local, localPathForMD5) {
     let actualMap = flatTree(rootActual, [], {});
 
     let modified = [], deleted = [], added = [];
-    Object.entries(expectMap).forEach(e => {
+    for(let e of Object.entries(expectMap)) {
         let name = e[0], expect = e[1];
         let actual = actualMap[name];
         let isDir = expect.size === -1;
@@ -355,13 +372,13 @@ function calcDiff(remote, local, localPathForMD5) {
             } else if (isDir) {
                 //同名目录不做处理
             } else if (localPathForMD5) {
-                let actualMD5 = actual.md5 || getPartialMD5(md5File.sync(path.join(localPathForMD5, actual.path)));
+                let actualMD5 = actual.md5 || getPartialMD5(await md5File(path.join(localPathForMD5, actual.path)));
                 if (actualMD5 !== expect.md5) {
                     modified.push(expect.path);
                 }
             }
         }
-    });
+    }
     let totalBytes = Object.values(expectMap).reduce((pre, obj) => pre + obj.size, 0);
     let addedBytes = added.reduce((pre, added) => pre + expectMap[normalizePath(added)].size, 0);
     let modifiedBytes = modified.reduce((pre, modified) => pre + expectMap[normalizePath(modified)].size, 0);

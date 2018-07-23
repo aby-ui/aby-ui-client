@@ -287,7 +287,7 @@ function getAddOnDir(manual) {
     }
 }
 
-let downloadRepo;
+let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上更新的话不需要重新计算
 (function () {
 
     const {downloadRetry, getGitRawUrl, downloadList} = require('./utils');
@@ -310,30 +310,39 @@ let downloadRepo;
 
         //下载成功然后改名
         let savePath = getRes(`data/filelist-${repo}-${hash}.gz`);
+        await fs.ensureDir(addOnDir);
 
-        if (!fs.existsSync(savePath)) {
-            let bytes = 0;
-            try {
-                await downloadRetry('.filelist.php', savePath + '.tmp', fileToGitRaw(GIT_USER, repo, hash), delta => console.log('downloaded', bytes += delta));
-                console.log('list file downloaded');
-                fs.renameSync(savePath + '.tmp', savePath);
-            } catch (e) {
-                return console.error('无法获取插件变更信息', e);
+        let remote, local, result;
+        //使用10秒以内的结果
+        if(!lastCheckResult || Date.now() - lastCheckResult.time > 10*1000 ) {
+            fire('RepoChecking');
+            if (!await fs.pathExists(savePath)) {
+                let bytes = 0;
+                try {
+                    await downloadRetry('.filelist.php', savePath + '.tmp', fileToGitRaw(GIT_USER, repo, hash), delta => console.log('downloaded', bytes += delta));
+                    console.log('list file downloaded');
+                    await fs.rename(savePath + '.tmp', savePath);
+                } catch (e) {
+                    return console.error('无法获取插件变更信息', e);
+                }
+            } else {
+                console.log('use former downloaded');
             }
+
+            remote = futil.readJsonGZ(savePath);
+            local = await futil.buildFileList(addOnDir, [], false, true);
+            result = await futil.calcDiff(remote, local, addOnDir);
+            lastCheckResult = {remote: remote, result: result, time: Date.now()}
         } else {
-            console.log('use former downloaded');
+            remote = lastCheckResult.remote;
+            result = lastCheckResult.result;
         }
 
-        fs.ensureDirSync(addOnDir);
-
-        let remote = futil.readJsonGZ(savePath);
-        let local = futil.buildFileList(addOnDir, [], false, true);
-        let result = futil.calcDiff(remote, local, addOnDir);
-
         //先删除文件
-        result.deleted.forEach(file => {
-            fs.removeSync(path.join(addOnDir, file))
-        });
+        for (const file of result.deleted) {
+            //TODO 检查是不是我们的插件
+            await fs.remove(path.join(addOnDir, file))
+        }
 
         let downloads = result.modified.concat(result.added);
         let downloadsCount = downloads.length;
@@ -343,6 +352,7 @@ let downloadRepo;
         if(callback) callback('RepoChecked', downloadsCount, downloadsBytes);
         if(downloadsCount === 0 || checkOnly) return;
 
+        if(callback) callback('RepoBeginDownloading');
         let before = process.uptime() * 1000;
         let bytesDownloaded = 0;
         let fileSuccess = 0, fileFail = 0;
@@ -359,11 +369,12 @@ let downloadRepo;
 
         console.log("downloaded", bytesDownloaded, ', time:', process.uptime() * 1000 - before);
 
-        local = futil.buildFileList(addOnDir, [], false, true);
-        result = futil.calcDiff(remote, local); //仅比较文件尺寸即可
+        local = await futil.buildFileList(addOnDir, [], false, true);
+        result = await futil.calcDiff(remote, local); //仅比较文件尺寸即可
         let remained = result.modified.length + result.added.length;
         console.log(remained > 0 ? '更新不完全' : '更新成功');
-        if(callback) callback('RepoDownloaded', remained === 0, bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
+        lastCheckResult = undefined;
+        if(callback) callback('RepoDownloaded', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
     }
 })();
 
@@ -503,18 +514,18 @@ function EventMain(event, method, arg1) {
             let addOnDir = getAddOnDir();
             let repo = releaseData && releaseData.repos['repo-all'];
             if(addOnDir && repo && repo.hash) {
-                fire('RepoChecking');
                 downloadRepo('repo-all', repo.hash, addOnDir, false, fire);
             }
             break;
         }
         case 'CheckAddOnDetail': {
-            let addOnDir = getAddOnDir();
-            let repo = releaseData && releaseData.repos['repo-all'];
-            if(addOnDir && repo && repo.hash) {
-                fire('RepoChecking');
-                downloadRepo('repo-all', repo.hash, addOnDir, true, fire);
-            }
+            checkUpdateAsar().then(() => {
+                let addOnDir = getAddOnDir();
+                let repo = releaseData && releaseData.repos['repo-all'];
+                if(addOnDir && repo && repo.hash) {
+                    downloadRepo('repo-all', repo.hash, addOnDir, true, fire);
+                }
+            })
             break;
         }
     }

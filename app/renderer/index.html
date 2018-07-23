@@ -137,18 +137,26 @@
                 $('#btnCheck').attr('disabled', false);
                 break;
             }
+            case 'RepoBeginDownloading': {
+                $('#btnUpdate').attr('disabled', true);
+                $('#btnCheck').attr('disabled', true);
+                break;
+            }
             case 'RepoDownloading': {
-                let [arg1, arg2, bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount] = arguments;
-                $('#spanUpdateInfo').text(`正在下载... 文件数：${fileSuccess + fileFail} / ${downloadsCount} 文件大小：${prettyBytes(bytesDownloaded)} / ${prettyBytes(downloadsBytes)}`);
-                $('#progressBar').css('width', (bytesDownloaded * 100 / downloadsBytes) + "%");
+                let [bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount] = [].slice.call(arguments, 2);
+                if(bytesDownloaded) {
+                    $('#spanUpdateInfo').text(`正在下载... 文件数：${fileSuccess + fileFail} / ${downloadsCount} 文件大小：${prettyBytes(bytesDownloaded)} / ${prettyBytes(downloadsBytes)}`);
+                    $('#progressBar').css('width', (bytesDownloaded * 100 / downloadsBytes) + "%");
+                }
                 break;
             }
             case 'RepoDownloaded': {
-                let [arg1, arg2, success, bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount] = arguments;
-                $('#spanUpdateInfo').text(`插件文件更新完毕, 成功：${fileSuccess} 失败: ${fileFail}, 文件大小：${prettyBytes(bytesDownloaded)}`);
+                let [bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount] = [].slice.call(arguments, 2);
+                $('#spanUpdateInfo').text(`插件文件更新完毕，成功：${fileSuccess}${fileFail > 0 ? '，失败：' + fileFail : ''}，总大小：${prettyBytes(bytesDownloaded)}`);
                 $('#progressBar').css('width', '100%');
+                $('#btnUpdate').attr('disabled', fileFail === 0);
+                $('#btnCheck').attr('disabled', false);
                 window.updating = false;
-
                 break;
             }
 
