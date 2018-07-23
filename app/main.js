@@ -543,11 +543,11 @@ function EventMain(event, method, arg1) {
             if (addOnDir && repo && repo.hash) {
                 downloadRepo('repo-all', repo.hash, addOnDir, false, fire)
                     .then(() => {
-                            //删除列表里我们的插件
+                            //删除列表里我们的插件 TODO:如果出现在repo的dirs里，则不删除，否则会循环
                             for (let one of (releaseData["removed-addons"] || [])) {
                                 const tocFile = path.join(addOnDir, one, one + '.toc');
                                 if (fs.existsSync(tocFile)) {
-                                    let content = fs.readFileSync(tocFile);
+                                    let content = fs.readFileSync(tocFile).toString();
                                     let isOurs = content.indexOf('\n## X-Vendor: AbyUI') >= 0
                                         || content.indexOf('\n## X-Vendor: NetEase') >= 0
                                         || content.indexOf('\n## X-163UI-Version:') >= 0;
