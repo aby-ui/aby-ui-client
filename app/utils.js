@@ -30,7 +30,7 @@ function download(url, dest, options) {
                     return reject(data);
                 }
 
-                const req = require(parsedUrl.protocol.slice(0, -1)).request(Object.assign({
+                const req = net.request(Object.assign({
                     method: options.method || 'GET',
                     headers: Object.assign({Range: 'bytes=' + start + '-'}, options.headers)
                 }, parsedUrl), res => {
@@ -84,15 +84,7 @@ function download(url, dest, options) {
                     })
 
                     res.on('end', () => file.end())
-                    file.on('finish', () =>
-                        res.complete
-                            ? resolve(url)
-                            : rejectRevertDownloaded({
-                                error: new Error('IncompleteResponse'),
-                                reason: 'response-incomplete',
-                                url: url
-                            })
-                    )
+                    file.on('finish', () => resolve(url));
                 })
 
                 options.onrequest && options.onrequest(req)
@@ -107,7 +99,7 @@ function download(url, dest, options) {
                     reason: 'request-abort',
                     url: url
                 }))
-                req.setTimeout((options.timeout || 30) * 1000)
+                // req.setTimeout((options.timeout || 30) * 1000)
                 req.end()
             })
         }
@@ -223,6 +215,7 @@ module.exports = {
 const zlib = require('zlib');
 const klawSync = require('klaw-sync');
 const md5File = require('md5-file');
+const { net } = require('electron');
 
 // 获取md5的前4个字节
 let getPartialMD5 = function (rightMD5) {
