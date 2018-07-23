@@ -21,6 +21,45 @@ const requireLib = (module) => require(path.join(libPath, 'node_modules', module
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow;
 
+//runJs(`$("#spanWowPath").html(decodeURI("${encodeURI(wowPath)}"))`);
+function runJs(js, callback) {
+    if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.executeJavaScript(js, callback);
+    }
+}
+
+//发送ABYUI_RENDER事件
+function fire() {
+    if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('ABYUI_RENDER', ...arguments);
+    }
+}
+
+const EventEmitter = require('events');
+const evm = new EventEmitter();
+const EVENT_GET_WOW_PATH = 'EVENT_GET_WOW_PATH'
+//evm.emit(EVENT_GET_WOW_PATH, wowPath);
+evm.on(EVENT_GET_WOW_PATH, (arg1) => {
+    console.log(arg1);
+})
+
+// ------------------------------------------------------------------------------------------
+// -- 加载配置项
+// ------------------------------------------------------------------------------------------
+let localJsonPath = getRes('data/abyui-local.json')
+let localData;
+if (fs.existsSync(localJsonPath)) {
+    localData = fs.readJsonSync(localJsonPath);
+} else {
+    fs.ensureDirSync(path.dirname(localJsonPath));
+    localData = {currWowPath: "", usedWowPaths: [], repos: {}}
+    saveLocalData();
+}
+
+function saveLocalData() {
+    fs.writeJsonSync(localJsonPath, localData);
+}
+
 // ------------------------------------------------------------------------------------------
 // -- 定时检查app版本更新, 检查完毕后，每5分钟检查一次，检查失败每2分钟检查意思
 // ------------------------------------------------------------------------------------------
@@ -151,12 +190,56 @@ let checkUpdateAsar
     }
 })();
 
-function getAddOnDir() {
+function _isWowPathVaid(wowPath) {
+    //TODO mac
+    if (wowPath && wowPath.trim().length > 0) {
+        return fs.existsSync(path.join(wowPath, 'Wow.exe'));
+    }
+}
 
+/**
+ * 获取插件路径
+ * @param manual 手工
+ * @returns {string}
+ */
+function getAddOnDir(manual) {
+    //读取配置里保存的魔兽目录
+    let wowPath = localData.currWowPath;
+    if (!_isWowPathVaid(wowPath)) wowPath = undefined;
+
+    //TODO regedit win32
+
+    if (!wowPath && manual) {
+        while (true) {
+            let chosen = dialog.showOpenDialog(mainWindow, {
+                title: '选择魔兽执行文件',
+                properties: ['openFile'],
+                filters: [{name: 'Wow', extensions: ['exe']}]
+            })
+            if (!chosen) break;
+            let dir = path.dirname(chosen[0]);
+            if (_isWowPathVaid(dir)) {
+                wowPath = dir;
+                break;
+            } else {
+                dialog.showMessageBox(mainWindow, {title: '选择无效', type: 'warning', message: '目录下没有 Wow.exe 文件，请重新选择!'});
+            }
+        }
+    }
+
+    if (wowPath) {
+        // 界面选择的，则保存到配置文件
+        if(manual) {
+            localData.currWowPath = wowPath;
+            saveLocalData();
+        }
+        fire('GetWowPathDone', wowPath);
+         return path.resolve(path.join(wowPath, 'Interface/AddOns'));
+    }
 }
 
 let downloadRepo;
-(function() {
+(function () {
 
     const {downloadRetry, getGitRawUrl} = require('./utils');
 
@@ -172,8 +255,8 @@ let downloadRepo;
         }
     };
 
-    downloadRepo = async function(repo, hash) {
-        console.log('======================= downloading repo', repo);
+    downloadRepo = async function (repo, hash) {
+        console.log('======================= downloading repo', repo, hash);
 
         //下载成功然后改名
         let savePath = getRes(`data/filelist-${repo}-${hash}.gz`);
@@ -241,7 +324,7 @@ function createWindow() {
         frame: true,
         resizable: false,
         closable: debugging,
-        webPreferences : {
+        webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
             preload: __dirname + '/renderer/preload.js'
@@ -249,7 +332,7 @@ function createWindow() {
     });
 
     // Open the DevTools.
-    // mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools();
 
     mainWindow.webContents.on('did-finish-load', function () {
         if (mainWindow) mainWindow.setProgressBar(0);
@@ -266,7 +349,7 @@ function createWindow() {
         // mainWindow = null //正常应该是设置为null, 当全部窗口都关闭时，程序退出
         // 仅仅隐藏窗口，阻止默认事件执行close()
         mainWindow.hide();
-        if(!debugging) e.preventDefault();
+        if (!debugging) e.preventDefault();
         console.log('on close prevent');
     })
 
@@ -316,8 +399,8 @@ app.on('ready', () => {
     if (isSecondInstance) return;
     //testElectron();
 
-    if(!debugging) setTimeout(checkUpdateAsar, 1000);
-
+    getAddOnDir();
+    if (!debugging) setTimeout(checkUpdateAsar, 1000);
     createWindow();
 })
 
@@ -346,22 +429,13 @@ app.on('browser-window-created', function (e, window) {
 // ------------------------------------------------------------------------------------------
 // -- 界面事件
 // ------------------------------------------------------------------------------------------
-ipcMain.on('asynchronous-message', (event, arg) => {
-    console.log(arg); // prints "ping"
-    event.sender.send('asynchronous-reply', 'pong2')
-});
-
-let a = 0;
-ipcMain.on('synchronous-message', (event, arg) => {
-    a++;
-    mainWindow.setProgressBar(a / 100);
-    console.log(arg) // prints "ping"
-    event.returnValue = dialog.showOpenDialog({
-        title: '选择魔兽执行文件',
-        properties: ['openDirectory'],
-        filters: [{name: 'exe', extensions: ['exe']}]
-    }) || 'null';
-    //event.returnValue = a;
+ipcMain.on('ABYUI_MAIN', (event, method, arg1) => {
+    switch (method) {
+        case 'GetWowPath':
+            getAddOnDir(true);
+            return event.returnValue = null;
+    }
+    event.returnValue = null;
 });
 
 async function testElectron() {

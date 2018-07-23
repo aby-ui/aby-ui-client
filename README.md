@@ -1,3 +1,8 @@
+# mirror
+
+ELECTRON_MIRROR=https://npm.taobao.org/mirrors/electron/
+npm --registry=https://registry.npm.taobao.org
+
 # electron-quick-start
 
 **Clone and run for a quick way to see Electron in action.**

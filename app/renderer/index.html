@@ -9,6 +9,7 @@
             background-color: #eee;
             border: 1px solid #ddd;
         }
+
         #mainCt .row {
             margin: 10px -40px 10px -40px;
         }
@@ -20,10 +21,10 @@
 <div class="container show-grid1" id="mainCt">
     <div class="row">
         <div class="col-xs-2" align="left">
-            <button type="button" class="btn btn-primary" onclick="send()">魔兽目录</button>
+            <button type="button" class="btn btn-primary" onclick="javascript:fire('GetWowPath')">魔兽目录</button>
         </div>
         <div class="col-xs-8">
-            <span style="font-size: 20px;">c:\games\wow.dev</span>
+            <span id="spanWowPath" style="font-size: 14px;"></span>
         </div>
         <div class="col-xs-2" align="right">
             <button type="button" class="btn btn-warning">清理插件</button>
@@ -34,7 +35,7 @@
             <button type="button" class="btn btn-primary disabled">更新插件</button>
         </div>
         <div class="col-xs-8" style="margin-top: 6px">
-            <span style="font-size: 16px;">已是最新版，点击右侧按钮详细检查</span>
+            <span style="font-size: 16px;">请先选择魔兽世界目录</span>
         </div>
         <div class="col-xs-2" align="right">
             <button type="button" class="btn btn-primary">详细检查</button>
@@ -43,7 +44,8 @@
     <div class="row">
         <div class="col-xs-12">
             <div class="progress">
-                <div class="progress-bar progress-bar-striped active" role="progressbar"  aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" style="width: 60%;">
+                <div class="progress-bar progress-bar-striped active" role="progressbar" aria-valuenow="60"
+                     aria-valuemin="0" aria-valuemax="100" style="width: 60%;">
                     <span class="not-sr-only">60% Complete</span>
                 </div>
             </div>
@@ -94,33 +96,18 @@
     })();
 </script>
 
+<script src="./jquery.min.js"></script>
 <script>
-    window.$ = window.jQuery = require('./jquery.min.js');
-
-    // You can also require other files to run in this process
     require('./renderer.js');
 
-    const {ipcRenderer} = require('electron');
-
-    var i=0;
-    ipcRenderer.on('asynchronous-reply', (event, arg) => {
-        $('#progress1').css('width', (i+=10)+'%');
-        console.log(arg) // prints "pong"
+    ipcRenderer.on('ABYUI_RENDER', (obj, event, arg1, arg2) => {
+        switch (event) {
+            case 'GetWowPathDone': {
+                return $('#spanWowPath').text(arg1);
+            }
+        }
     });
-
-    function send() {
-        console.log(ipcRenderer.sendSync('synchronous-message', 'ping'));
-        ipcRenderer.send('asynchronous-message', 'ping22')
-    }
 </script>
-
-<script src="./jquery.min.js"></script>
 <script src="./bootstrap.min.js"></script>
-<script>
-    $.get('file:///c:/code/electron/aby-ui-client/app.asar/package.json', (data) => {
-        console.log(data)
-    })
-</script>
-<!--<script src="file:///c:/code/electron/aby-ui-client/app.asar/main.js"></script>-->
 </body>
 </html>
