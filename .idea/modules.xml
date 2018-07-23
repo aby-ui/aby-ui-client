@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/aby-ui-client.iml" filepath="$PROJECT_DIR$/.idea/aby-ui-client.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/electron-quick-start.iml" filepath="$PROJECT_DIR$/.idea/electron-quick-start.iml" />
     </modules>
   </component>
 </project>

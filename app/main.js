@@ -76,10 +76,13 @@ function updateReleaseData() {
 // ------------------------------------------------------------------------------------------
 // -- 插件更新事件
 // ------------------------------------------------------------------------------------------
+const ADDON_DIR_JSON = 'abyui-repos.json';
+
 function getLocalAddOnInfo() {
     let addOnDir = getAddOnDir();
     if (addOnDir) {
-        let jsonPath = path.join(addOnDir, 'abyui-repos.json');
+        // 如果插件目录下存在json，则使用目录下的，否则使用./data里的
+        let jsonPath = path.join(addOnDir, ADDON_DIR_JSON);
         if (fs.existsSync(jsonPath)) {
             return fs.readJsonSync(jsonPath);
         } else {
@@ -170,7 +173,7 @@ let checkUpdateAsar
         downloadRetry('abyui-release.json', releaseRemote + ".downloading", releaseJsonUrl(GIT_USER, 'repo-release', 'master'))
             .then(() => fs.remove(releaseRemote))
             .then(() => fs.rename(releaseRemote + ".downloading", releaseRemote))
-            .then(() => updateReleaseData())
+            .then(() => updateReleaseData()) //下载后就可以检查插件版本
             .then((remote) => {
                 if (debugging) return;
                 // 如果当前electron比远程要求的electron版本要低，则不更新，提示错误
@@ -182,8 +185,6 @@ let checkUpdateAsar
                     exitApp(-1);
                     throw new Error('electron version too low');
                 }
-
-                //TODO: 比较插件版本，提示web，插件更新成功后才保存release-json为新的，这里不用保存，直接用version判断即可
 
                 let promises = [];
                 //一个小循环，防止写两遍
@@ -331,7 +332,7 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
 
             remote = futil.readJsonGZ(savePath);
             local = await futil.buildFileList(addOnDir, [], false, true);
-            result = await futil.calcDiff(remote, local, addOnDir);
+            result = await futil.calcDiff(remote, local, addOnDir); //如果不传入addOnDir则只比较size，不计算md5
             lastCheckResult = {remote: remote, result: result, time: Date.now()}
         } else {
             remote = lastCheckResult.remote;
@@ -340,7 +341,6 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
 
         //先删除文件
         for (const file of result.deleted) {
-            //TODO 检查是不是我们的插件
             await fs.remove(path.join(addOnDir, file))
         }
 
@@ -372,11 +372,21 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
         local = await futil.buildFileList(addOnDir, [], false, true);
         result = await futil.calcDiff(remote, local); //仅比较文件尺寸即可
         let remained = result.modified.length + result.added.length;
-        console.log(remained > 0 ? '更新不完全' : '更新成功');
+        let success = remained === 0;
+        console.log(success ? '更新成功' : '更新不完全');
+        if (success) {
+            let reposJson = path.join(addOnDir, ADDON_DIR_JSON);
+            let json = fs.existsSync(reposJson) ? fs.readJsonSync(reposJson) : {};
+            json.repos = json.repos || {};
+            json.repos[repo] = releaseData.repos[repo];
+            fs.writeJsonSync(reposJson, json);
+
+            localData.repos = localData.repos || {};
+            localData.repos[repo] = releaseData.repos[repo];
+            saveLocalData();
+        }
         lastCheckResult = undefined;
         if (callback) callback('RepoDownloaded', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
-
-        //TODO save abyui-repo.json
     }
 })();
 
@@ -410,7 +420,7 @@ function createWindow() {
                 fire('UpdateBulletin', fs.readFileSync(bullet).toString());
             }
             const {downloadRetry} = require('./utils');
-            let updateBullet = function() {
+            let updateBullet = function () {
                 downloadRetry('https://gitlab.com/aby-ui/repo-release/raw/master/bulletin.html', bullet + ".downloading", 2)
                     .then(() => fs.remove(bullet))
                     .then(() => fs.rename(bullet + ".downloading", bullet))
@@ -531,7 +541,24 @@ function EventMain(event, method, arg1) {
             let addOnDir = getAddOnDir();
             let repo = releaseData && releaseData.repos['repo-all'];
             if (addOnDir && repo && repo.hash) {
-                downloadRepo('repo-all', repo.hash, addOnDir, false, fire);
+                downloadRepo('repo-all', repo.hash, addOnDir, false, fire)
+                    .then(() => {
+                            //删除列表里我们的插件
+                            for (let one of (releaseData["removed-addons"] || [])) {
+                                const tocFile = path.join(addOnDir, one, one + '.toc');
+                                if (fs.existsSync(tocFile)) {
+                                    let content = fs.readFileSync(tocFile);
+                                    let isOurs = content.indexOf('\n## X-Vendor: AbyUI') >= 0
+                                        || content.indexOf('\n## X-Vendor: NetEase') >= 0
+                                        || content.indexOf('\n## X-163UI-Version:') >= 0;
+                                    console.log('see if should remove', one, isOurs);
+                                    if (isOurs) {
+                                        fs.removeSync(path.join(addOnDir, one));
+                                    }
+                                }
+                            }
+                        }
+                    );
             }
             break;
         }
@@ -572,16 +599,5 @@ async function testElectron() {
     }
     // mainWindow.setClosable(false);
     // mainWindow.setFullScreenable(true);
-
-    /*
-    TODO 更新完了以后写入releaseJson
-                    return fs.remove(releaseJsonPath)
-                    .then(() => fs.rename(releaseJsonPath + '.remote', releaseJsonPath))
-                    .then(() => {
-                        console.log('update success');
-                        showRestartDialog();
-                        return r;
-                    })
-     */
     if (true) exitApp(0);
 }

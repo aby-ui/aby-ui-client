@@ -31,5 +31,5 @@
       "dirs" : ["ABC", "EEE"]
     }
   },
-  "removed-dirs" : [ "XYZ" ]    
+  "removed-addons" : [ "AtlasLoot", "AtlasLoot_WrathoftheLichKing", "NPCMark" ]
 }
