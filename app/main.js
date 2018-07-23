@@ -100,8 +100,8 @@ function checkUpdateAddOn() {
         return fire('SetUpdateInfo', '尚未取得新版本信息', false);
     } else {
         //比较版本
-        let local = getLocalAddOnInfo().repos['repo-all'];
-        let release = releaseData.repos['repo-all'];
+        let local = getLocalAddOnInfo().repos['repo-base'];
+        let release = releaseData.repos['repo-base'];
         if (local && local.date >= release.date) {
             return fire('SetUpdateInfo', (local && local.date || '') + ' 已是最新版本，可以用右侧按钮进一步检查文件变化', false);
         } else {
@@ -541,9 +541,9 @@ function EventMain(event, method, arg1) {
         }
         case 'UpdateAddOn': {
             let addOnDir = getAddOnDir();
-            let repo = releaseData && releaseData.repos['repo-all'];
+            let repo = releaseData && releaseData.repos['repo-base'];
             if (addOnDir && repo && repo.hash) {
-                downloadRepo('repo-all', repo.hash, addOnDir, false, fire)
+                downloadRepo('repo-base', repo.hash, addOnDir, false, fire)
                     .then(() => {
                             //删除列表里我们的插件 TODO:如果出现在repo的dirs里，则不删除，否则会循环
                             for (let one of (releaseData["removed-addons"] || [])) {
@@ -572,9 +572,9 @@ function EventMain(event, method, arg1) {
         case 'CheckAddOnDetail': {
             checkUpdateAsar().then(() => {
                 let addOnDir = getAddOnDir();
-                let repo = releaseData && releaseData.repos['repo-all'];
+                let repo = releaseData && releaseData.repos['repo-base'];
                 if (addOnDir && repo && repo.hash) {
-                    downloadRepo('repo-all', repo.hash, addOnDir, true, fire);
+                    downloadRepo('repo-base', repo.hash, addOnDir, true, fire);
                 }
             })
             break;
