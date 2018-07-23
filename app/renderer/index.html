@@ -51,20 +51,7 @@
             </div>
         </div>
     </div>
-    <div class="row">
-        <div class="col-xs-6">
-            <h3>更新日志</h3>
-            <ul>
-                <li>AA激发XJ加了个家啊啊发</li>
-                <li>AA激发XJ加了个家啊啊发</li>
-                <li>AA激发XJ加了个家啊啊发</li>
-                <li>AA激发XJ加了个家啊啊发</li>
-            </ul>
-        </div>
-        <div class="col-xs-6">
-            <h1>广告位招租</h1>
-            <h3>要想富，少生孩子多种树</h3>
-        </div>
+    <div class="row" id="rowBulletin">
     </div>
 </div>
 
@@ -103,6 +90,10 @@
     function OnAbyUI(obj, event, arg1, arg2) {
         if (event !== 'RepoDownloading') console.log(event, arg1, arg2)
         switch (event) {
+            case 'UpdateBulletin': {
+                $('#rowBulletin').html(arg1);
+                break;
+            }
             case 'GetWowPathDone': {
                 $('#spanWowPath').text(arg1);
                 break;

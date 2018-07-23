@@ -78,9 +78,9 @@ function updateReleaseData() {
 // ------------------------------------------------------------------------------------------
 function getLocalAddOnInfo() {
     let addOnDir = getAddOnDir();
-    if(addOnDir) {
+    if (addOnDir) {
         let jsonPath = path.join(addOnDir, 'abyui-repos.json');
-        if(fs.existsSync(jsonPath)) {
+        if (fs.existsSync(jsonPath)) {
             return fs.readJsonSync(jsonPath);
         } else {
             return localData;
@@ -172,7 +172,7 @@ let checkUpdateAsar
             .then(() => fs.rename(releaseRemote + ".downloading", releaseRemote))
             .then(() => updateReleaseData())
             .then((remote) => {
-                if(debugging) return;
+                if (debugging) return;
                 // 如果当前electron比远程要求的electron版本要低，则不更新，提示错误
                 if (compare(verElec, remote.client.electron) < 0) {
                     dialog.showMessageBox(mainWindow, {
@@ -314,7 +314,7 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
 
         let remote, local, result;
         //使用10秒以内的结果
-        if(!lastCheckResult || Date.now() - lastCheckResult.time > 10*1000 ) {
+        if (!lastCheckResult || Date.now() - lastCheckResult.time > 10 * 1000) {
             fire('RepoChecking');
             if (!await fs.pathExists(savePath)) {
                 let bytes = 0;
@@ -349,21 +349,21 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
         let downloadsBytes = result.bytes.modified + result.bytes.added;
         let totalBytes = result.bytes.total;
         console.log("FILE need to download:", downloadsCount, ', BYTES:', downloadsBytes + ' / ' + totalBytes);
-        if(callback) callback('RepoChecked', downloadsCount, downloadsBytes);
-        if(downloadsCount === 0 || checkOnly) return;
+        if (callback) callback('RepoChecked', downloadsCount, downloadsBytes);
+        if (downloadsCount === 0 || checkOnly) return;
 
-        if(callback) callback('RepoBeginDownloading');
+        if (callback) callback('RepoBeginDownloading');
         let before = process.uptime() * 1000;
         let bytesDownloaded = 0;
         let fileSuccess = 0, fileFail = 0;
         let onDataDelta = (delta) => {
             bytesDownloaded += delta;
-            if(callback) callback('RepoDownloading', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
+            if (callback) callback('RepoDownloading', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
         };
         let onFileFinish = (file, success, finished, total) => {
-            if(success) fileSuccess++; else fileFail++;
+            if (success) fileSuccess++; else fileFail++;
             console.log(finished + ' / ' + total, '    ', bytesDownloaded + ' / ' + downloadsBytes);
-            if(callback) callback('RepoDownloading', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
+            if (callback) callback('RepoDownloading', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
         };
         await downloadList(downloads, addOnDir, fileToGitRaw(GIT_USER, repo, hash), onDataDelta, onFileFinish);
 
@@ -374,7 +374,9 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
         let remained = result.modified.length + result.added.length;
         console.log(remained > 0 ? '更新不完全' : '更新成功');
         lastCheckResult = undefined;
-        if(callback) callback('RepoDownloaded', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
+        if (callback) callback('RepoDownloaded', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
+
+        //TODO save abyui-repo.json
     }
 })();
 
@@ -400,7 +402,23 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
 
     mainWindow.webContents.on('did-finish-load', function () {
-        if (mainWindow) mainWindow.setProgressBar(0);
+        if (mainWindow) {
+            mainWindow.setProgressBar(0);
+
+            let bullet = getRes('data/bulletin.html');
+            if (fs.existsSync(bullet)) {
+                fire('UpdateBulletin', fs.readFileSync(bullet).toString());
+            }
+            const {downloadRetry} = require('./utils');
+            let updateBullet = function() {
+                downloadRetry('https://gitlab.com/aby-ui/repo-release/raw/master/bulletin.html', bullet + ".downloading", 2)
+                    .then(() => fs.remove(bullet))
+                    .then(() => fs.rename(bullet + ".downloading", bullet))
+                    .then(() => fire('UpdateBulletin', fs.readFileSync(bullet).toString()));
+            };
+            setInterval(updateBullet, 10 * 60 * 1000);
+            setTimeout(updateBullet, 100);
+        }
     });
 
     // and load the index.html of the app.
@@ -500,7 +518,7 @@ function EventMain(event, method, arg1) {
             break;
         case 'OpenWowPath': {
             let addOnDir = getAddOnDir();
-            if(addOnDir) {
+            if (addOnDir) {
                 let child = require('child_process').spawn('explorer', [addOnDir], {
                     detached: true,
                     stdio: 'ignore',
@@ -512,7 +530,7 @@ function EventMain(event, method, arg1) {
         case 'UpdateAddOn': {
             let addOnDir = getAddOnDir();
             let repo = releaseData && releaseData.repos['repo-all'];
-            if(addOnDir && repo && repo.hash) {
+            if (addOnDir && repo && repo.hash) {
                 downloadRepo('repo-all', repo.hash, addOnDir, false, fire);
             }
             break;
@@ -521,7 +539,7 @@ function EventMain(event, method, arg1) {
             checkUpdateAsar().then(() => {
                 let addOnDir = getAddOnDir();
                 let repo = releaseData && releaseData.repos['repo-all'];
-                if(addOnDir && repo && repo.hash) {
+                if (addOnDir && repo && repo.hash) {
                     downloadRepo('repo-all', repo.hash, addOnDir, true, fire);
                 }
             })
@@ -531,7 +549,7 @@ function EventMain(event, method, arg1) {
     event.returnValue = null;
 }
 
-ipcMain.on('ABYUI_MAIN', function() {
+ipcMain.on('ABYUI_MAIN', function () {
     EventMain(...arguments);
     // const args = Array.from(arguments)
     // process.nextTick(EventMain, ...args);
