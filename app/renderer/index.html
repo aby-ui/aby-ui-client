@@ -9,6 +9,7 @@
             background-color: #eee;
             border: 1px solid #ddd;
         }
+
         #mainCt .row {
             margin: 10px -40px 10px -40px;
         }
@@ -19,10 +20,10 @@
 <div class="container show-grid1" id="mainCt">
     <div class="row">
         <div class="col-xs-2" align="left">
-            <button type="button" class="btn btn-primary" onclick="javascript:fire('GetWowPath')">魔兽目录</button>
+            <button type="button" class="btn btn-primary" onclick="fire('GetWowPath')">魔兽目录</button>
         </div>
         <div class="col-xs-8" style="margin-top: 6px">
-            <span id="spanWowPath" style="font-size: 14px;"></span>
+            <span id="spanWowPath" style="font-size: 14px; cursor: pointer" onmouseup="fire('OpenWowPath')"></span>
         </div>
         <div class="col-xs-2" align="right">
             <button type="button" class="btn btn-warning">清理插件</button>
@@ -30,21 +31,22 @@
     </div>
     <div class="row">
         <div class="col-xs-2" align="left">
-            <button id="btnUpdate" type="button" class="btn btn-primary" disabled>更新插件</button>
+            <button id="btnUpdate" type="button" class="btn btn-primary" disabled onclick="fire('UpdateAddOn')">更新插件
+            </button>
         </div>
         <div class="col-xs-8" style="margin-top: 6px">
             <span id="spanUpdateInfo" style="font-size: 12px;"></span>
         </div>
         <div class="col-xs-2" align="right">
-            <button type="button" class="btn btn-primary">详细检查</button>
+            <button id='btnCheck' type="button" class="btn btn-primary" onclick="fire('CheckAddOnDetail')">详细检查</button>
         </div>
     </div>
     <div class="row">
         <div class="col-xs-12">
             <div class="progress">
-                <div class="progress-bar progress-bar-striped active" role="progressbar" aria-valuenow="60"
-                     aria-valuemin="0" aria-valuemax="100" style="width: 60%;">
-                    <span class="not-sr-only">60% Complete</span>
+                <div id="progressBar" class="progress-bar progress-bar-striped" role="progressbar" aria-valuenow="0"
+                     aria-valuemin="0" aria-valuemax="100" style="width: 0%;">
+                    <span class="sr-only">0% Complete</span>
                 </div>
             </div>
         </div>
@@ -98,18 +100,62 @@
 <script>
     require('./renderer.js');
 
-    ipcRenderer.on('ABYUI_RENDER', (obj, event, arg1, arg2) => {
+    function OnAbyUI(obj, event, arg1, arg2) {
+        if (event !== 'RepoDownloading') console.log(event, arg1, arg2)
         switch (event) {
             case 'GetWowPathDone': {
-                return $('#spanWowPath').text(arg1);
+                $('#spanWowPath').text(arg1);
+                break;
             }
             case 'SetUpdateInfo': {
-                console.log(event, arg1, arg2)
-                $('#spanUpdateInfo').text(arg1);
-                $('#btnUpdate').attr('disabled', !arg2);
+                // 正在更新的话则不改变
+                if (!window.updating) {
+                    $('#spanUpdateInfo').text(arg1);
+                    $('#btnUpdate').attr('disabled', !arg2);
+                }
+                break;
             }
+            case 'RepoChecking': {
+                window.updating = true;
+                $('#spanUpdateInfo').text(`正在对比文件...`);
+                $('#btnUpdate').attr('disabled', true);
+                $('#btnCheck').attr('disabled', true);
+                break;
+            }
+            case 'RepoChecked': {
+                //downloadsCount, downloadsBytes
+                if (arg1 === 0) {
+                    window.updating = false;
+                    $('#spanUpdateInfo').text(`全部文件检查完毕，不需更新`);
+                    $('#progressBar').css('width', '100%');
+                    $('#btnUpdate').attr('disabled', true);
+                } else {
+                    $('#spanUpdateInfo').text(`需要下载 ${arg1} 个文件, 总大小 ${prettyBytes(arg2)}`);
+                    $('#progressBar').css('width', 0);
+                    $('#btnUpdate').attr('disabled', false);
+                }
+                $('#btnCheck').attr('disabled', false);
+                break;
+            }
+            case 'RepoDownloading': {
+                let [arg1, arg2, bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount] = arguments;
+                $('#spanUpdateInfo').text(`正在下载... 文件数：${fileSuccess + fileFail} / ${downloadsCount} 文件大小：${prettyBytes(bytesDownloaded)} / ${prettyBytes(downloadsBytes)}`);
+                $('#progressBar').css('width', (bytesDownloaded * 100 / downloadsBytes) + "%");
+                break;
+            }
+            case 'RepoDownloaded': {
+                let [arg1, arg2, success, bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount] = arguments;
+                $('#spanUpdateInfo').text(`插件文件更新完毕, 成功：${fileSuccess} 失败: ${fileFail}, 文件大小：${prettyBytes(bytesDownloaded)}`);
+                $('#progressBar').css('width', '100%');
+                window.updating = false;
+
+                break;
+            }
+
         }
-    });
+    }
+
+    ipcRenderer.on('ABYUI_RENDER', OnAbyUI);
 </script>
 <script src="./bootstrap.min.js"></script>
 </body>

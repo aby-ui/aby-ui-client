@@ -216,3 +216,177 @@ module.exports = {
     downloadList: downloadList,
     getGitRawUrl: getGitRawUrl
 };
+
+// ------------------------------------------------------------------------------------------
+// -- fileUtils
+// ------------------------------------------------------------------------------------------
+const zlib = require('zlib');
+const klawSync = require('klaw-sync');
+const md5File = require('md5-file');
+
+// 获取md5的前4个字节
+let getPartialMD5 = function (rightMD5) {
+    return parseInt(rightMD5.substr(0, 8), 16);
+};
+
+// 标准化路径，用于对比
+let normalizePath = function (onepath) {
+    let s = path.normalize(onepath).toLowerCase();
+    if (s.slice(-1) === path.sep) s = s.slice(0, -1);
+    return s;
+};
+
+/**
+ * 生成根目录的文件列表，结构为 { 'dir' : { 'file' : [ size, md5_int ], ... }, ... }
+ * @param base 要列表的目录位置
+ * @param ignored 忽略的路径，可以是文件也可以是目录
+ * @param calcMd5 是否计算文件md5
+ * @param listEmptyDir 是否列出空目录，例如 'dir' : {}
+ */
+function buildFileList(base, ignored, calcMd5, listEmptyDir) {
+    let fileCount = 0;
+    let root = {}, pathMap = {}; //记录已经用过的目录对象
+    ignored = (ignored || []).map(normalizePath);
+
+    let deep = function (relative, isFile) {
+        if (relative === '.') return root;
+        if (pathMap[relative]) return pathMap[relative];
+        // if (ignored.indexOf(normalizePath(relative)) >= 0) return null; //已经在klawSync里处理过了，这一步可以去掉
+        let parent = deep(path.dirname(relative)); //先创建父目录
+        // if (parent === null) return null;
+        if (isFile) return parent;
+        let dir = {};
+        parent[path.basename(relative)] = dir; //父目录.目录名 = this
+        pathMap[relative] = dir; //map[完整路径] = this
+        return dir;
+    };
+
+    const paths = klawSync(base, {
+        nodir: false, //nodir:true的话不会遍历目录
+        filter: f => {
+            if (path.basename(f.path)[0] === '.') return false; //以.开头的文件及目录
+            if (ignored.indexOf(normalizePath(path.relative(base, f.path))) >= 0) return false; //配置文件里ignored
+            if (f.stats.isFile() && f.stats.size === 0) return false;
+            //TODO: 只保留lua, toc, xml, tga, blp, ogg, mp3, m2, ttf, 但用压缩包下载的可能会下到
+            return true;
+        }
+    });
+
+    paths.forEach(r => {
+        let p = r.path;
+        let relative = path.relative(base, p);
+        if (r.stats.isDirectory()) {
+            //目录靠目录里的文件来体现，如果目录里没有文件，则不会出现在文件列表里,除非指定listEmptyDir
+            if (listEmptyDir) deep(relative);
+            return;
+        }
+        let parent = deep(relative, true);
+        if (parent !== null) {
+            fileCount++;
+            let md5 = calcMd5 ? md5File.sync(r.path) : '00000000000000000000000000000000';
+            parent[path.basename(r.path)] = [r.stats.size, getPartialMD5(md5)];
+        }
+    });
+
+    return root;
+}
+
+function writeJsonGZ(path, object) {
+    fs.writeFileSync(path, zlib.gzipSync(JSON.stringify(object), {level: zlib.constants.Z_BEST_COMPRESSION}));
+}
+
+function readJsonGZ(path) {
+    //require('zlib').gunzipSync(require('fs').readFileSync('C:/code/lua/163ui.beta/repos/atlasloot/.filelist.gz')).toString()
+    let buf = fs.readFileSync(path);
+    let unzipped = zlib.gunzipSync(buf);
+    return JSON.parse(unzipped.toString());
+}
+
+let flatTree = function (dir, pathArray, result) {
+    Object.entries(dir).forEach(f => {
+        let name = f[0], data = f[1];
+        let isFile = Array.isArray(data); //目录是 {}， 文件是 [size, md5]
+        pathArray.push(name);
+        result[normalizePath(path.join(...pathArray))] = {
+            path: pathArray.join('/'),
+            size: isFile ? data[0] : -1,
+            md5: isFile ? data[1] : undefined
+        };
+        if (!isFile) {
+            flatTree(data, pathArray, result)
+        }
+        pathArray.pop();
+    });
+    return result;
+};
+
+/**
+ * 比较两个filelist对象，只返回新增的和变化的，
+ * @param remote 下载的filelist.json里的数据，固定包含md5
+ * @param localPathForMD5 本地插件目录，因为可能需要按需md5，如果此参数不提供，则只要size相同就认为相同
+ * @param local 本地插件目录生成的filelist，可以不包含md5，但是需要包含空目录，防止目录名和文件名冲突
+ * @return {modified: Array, deleted: Array, added: Array, bytes: {total: any, added: (*), modified: (*)}} 其中deleted可能存在目录及目录中的文件，真实删除时可能已经被删除掉了
+ */
+function calcDiff(remote, local, localPathForMD5) {
+    if (!local) local = buildFileList(localPathForMD5, [], false, true);
+    let rootActual = local.files ? local.files : local;
+    let rootExpect = remote.files ? remote.files : remote;
+
+    let expectMap = flatTree(rootExpect, [], {});
+    let actualMap = flatTree(rootActual, [], {});
+
+    let modified = [], deleted = [], added = [];
+    Object.entries(expectMap).forEach(e => {
+        let name = e[0], expect = e[1];
+        let actual = actualMap[name];
+        let isDir = expect.size === -1;
+        if (!actual) {
+            if (!isDir) added.push(expect.path);
+        } else if (expect.size !== actual.size) {
+            //尺寸不同
+            if (!isDir) modified.push(expect.path);
+            //根据需要先删除原文件
+            if ((isDir && actual.size !== -1) || (!isDir && actual.size === -1)) {
+                //一方为目录，另一方为文件
+                deleted.push(actual.path);
+            } else if (expect.path !== actual.path) {
+                //文件大小写不一致
+                deleted.push(actual.path);
+            }
+        } else {
+            //都是目录或者尺寸相同
+            if (expect.path !== actual.path) {
+                //文件大小写不一致
+                deleted.push(actual.path);
+                if (!isDir) modified.push(expect.path);
+            } else if (isDir) {
+                //同名目录不做处理
+            } else if (localPathForMD5) {
+                let actualMD5 = actual.md5 || getPartialMD5(md5File.sync(path.join(localPathForMD5, actual.path)));
+                if (actualMD5 !== expect.md5) {
+                    modified.push(expect.path);
+                }
+            }
+        }
+    });
+    let totalBytes = Object.values(expectMap).reduce((pre, obj) => pre + obj.size, 0);
+    let addedBytes = added.reduce((pre, added) => pre + expectMap[normalizePath(added)].size, 0);
+    let modifiedBytes = modified.reduce((pre, modified) => pre + expectMap[normalizePath(modified)].size, 0);
+    return {
+        modified: modified,
+        deleted: deleted,
+        added: added,
+        bytes: {
+            total: totalBytes,
+            added: addedBytes,
+            modified: modifiedBytes
+        }
+    };
+}
+
+Object.assign(module.exports, {
+    buildFileList: buildFileList,
+    writeJsonGZ: writeJsonGZ,
+    readJsonGZ: readJsonGZ,
+    calcDiff: calcDiff
+});

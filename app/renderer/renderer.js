@@ -9,3 +9,4 @@ window.fire = function() {
     ipcRenderer.send('ABYUI_MAIN', ...arguments);
 }
 window.ipcRenderer = ipcRenderer;
+window.prettyBytes = require('pretty-bytes');

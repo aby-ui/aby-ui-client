@@ -21,6 +21,11 @@ const requireLib = (module) => require(path.join(libPath, 'node_modules', module
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow;
 
+function exitApp(code) {
+    mainWindow = null;
+    app.exit(code);
+}
+
 //发送ABYUI_RENDER事件
 function fire() {
     if (mainWindow && mainWindow.webContents) {
@@ -71,6 +76,18 @@ function updateReleaseData() {
 // ------------------------------------------------------------------------------------------
 // -- 插件更新事件
 // ------------------------------------------------------------------------------------------
+function getLocalAddOnInfo() {
+    let addOnDir = getAddOnDir();
+    if(addOnDir) {
+        let jsonPath = path.join(addOnDir, 'abyui-repos.json');
+        if(fs.existsSync(jsonPath)) {
+            return fs.readJsonSync(jsonPath);
+        } else {
+            return localData;
+        }
+    }
+}
+
 function checkUpdateAddOn() {
     let wowPath = getAddOnDir();
     if (!wowPath) {
@@ -79,8 +96,14 @@ function checkUpdateAddOn() {
     if (!releaseData) {
         return fire('SetUpdateInfo', '尚未取得新版本信息', false);
     } else {
-        //TODO 比较版本
-        return fire('SetUpdateInfo', '发现新版本，更新时间 2018-07-23 10:30', true);
+        //比较版本
+        let local = getLocalAddOnInfo().repos['repo-all'];
+        let release = releaseData.repos['repo-all'];
+        if (local && local.date >= release.date) {
+            return fire('SetUpdateInfo', (local && local.date || '') + ' 已是最新版本，可以用右侧按钮进一步检查文件变化', false);
+        } else {
+            return fire('SetUpdateInfo', '发现新版本 ' + (release.date || ''), true);
+        }
     }
 }
 
@@ -108,7 +131,7 @@ let checkUpdateAsar
         lastPrompt = Date.now();
         if (button === 0) {
             app.relaunch({execPath: process.execPath, args: process.argv.slice(1).concat(['--relaunch'])});
-            app.exit(0);
+            exitApp(0);
         }
     }
 
@@ -149,13 +172,14 @@ let checkUpdateAsar
             .then(() => fs.rename(releaseRemote + ".downloading", releaseRemote))
             .then(() => updateReleaseData())
             .then((remote) => {
+                if(debugging) return;
                 // 如果当前electron比远程要求的electron版本要低，则不更新，提示错误
                 if (compare(verElec, remote.client.electron) < 0) {
                     dialog.showMessageBox(mainWindow, {
                         title: "警告", type: 'warning',
                         message: "发现更新器新版本，但当前版本过低，无法自动更新，请手工去论坛或网盘下载新版更新器，抱歉啦",
                     });
-                    app.exit(-1);
+                    exitApp(-1);
                     throw new Error('electron version too low');
                 }
 
@@ -255,6 +279,8 @@ function getAddOnDir(manual) {
         }
     }
 
+    if (!_isWowPathVaid(wowPath)) wowPath = undefined;
+
     if (wowPath) {
         fire('GetWowPathDone', wowPath);
         return path.resolve(path.join(wowPath, 'Interface/AddOns'));
@@ -264,7 +290,8 @@ function getAddOnDir(manual) {
 let downloadRepo;
 (function () {
 
-    const {downloadRetry, getGitRawUrl} = require('./utils');
+    const {downloadRetry, getGitRawUrl, downloadList} = require('./utils');
+    const futil = require('./utils');
 
     let fileToGitRaw = (gitUser, gitRepo, gitHash) => (file, retry) => {
         if (retry < 2) {
@@ -278,7 +305,7 @@ let downloadRepo;
         }
     };
 
-    downloadRepo = async function (repo, hash) {
+    downloadRepo = async function (repo, hash, addOnDir, checkOnly, callback) {
         console.log('======================= downloading repo', repo, hash);
 
         //下载成功然后改名
@@ -297,17 +324,15 @@ let downloadRepo;
             console.log('use former downloaded');
         }
 
-        let addonDir = path.join('./data/', 'Interface/AddOns');
-
-        fs.ensureDirSync(addonDir);
+        fs.ensureDirSync(addOnDir);
 
         let remote = futil.readJsonGZ(savePath);
-        let local = futil.buildFileList(addonDir, [], false, true);
-        let result = futil.calcDiff(remote, local, addonDir);
+        let local = futil.buildFileList(addOnDir, [], false, true);
+        let result = futil.calcDiff(remote, local, addOnDir);
 
         //先删除文件
         result.deleted.forEach(file => {
-            fs.removeSync(path.join(addonDir, file))
+            fs.removeSync(path.join(addOnDir, file))
         });
 
         let downloads = result.modified.concat(result.added);
@@ -315,24 +340,30 @@ let downloadRepo;
         let downloadsBytes = result.bytes.modified + result.bytes.added;
         let totalBytes = result.bytes.total;
         console.log("FILE need to download:", downloadsCount, ', BYTES:', downloadsBytes + ' / ' + totalBytes);
+        if(callback) callback('RepoChecked', downloadsCount, downloadsBytes);
+        if(downloadsCount === 0 || checkOnly) return;
 
         let before = process.uptime() * 1000;
         let bytesDownloaded = 0;
+        let fileSuccess = 0, fileFail = 0;
         let onDataDelta = (delta) => {
             bytesDownloaded += delta;
-            //console.log(`bytesDownloaded: ${bytesDownloaded} / ${downloadsBytes}`)
+            if(callback) callback('RepoDownloading', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
         };
         let onFileFinish = (file, success, finished, total) => {
+            if(success) fileSuccess++; else fileFail++;
             console.log(finished + ' / ' + total, '    ', bytesDownloaded + ' / ' + downloadsBytes);
+            if(callback) callback('RepoDownloading', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
         };
-        await downloadList(downloads, addonDir, fileToGitRaw(GIT_USER, repo, hash), onDataDelta, onFileFinish);
+        await downloadList(downloads, addOnDir, fileToGitRaw(GIT_USER, repo, hash), onDataDelta, onFileFinish);
 
         console.log("downloaded", bytesDownloaded, ', time:', process.uptime() * 1000 - before);
 
-        local = futil.buildFileList(addonDir, [], false, true);
+        local = futil.buildFileList(addOnDir, [], false, true);
         result = futil.calcDiff(remote, local); //仅比较文件尺寸即可
         let remained = result.modified.length + result.added.length;
         console.log(remained > 0 ? '更新不完全' : '更新成功');
+        if(callback) callback('RepoDownloaded', remained === 0, bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
     }
 })();
 
@@ -376,11 +407,6 @@ function createWindow() {
         console.log('on close prevent');
     })
 
-    // 最小化的时候也只是隐藏窗口
-    mainWindow.on('minimize', () => {
-        mainWindow.hide();
-    })
-
     let trayIcon = path.join(__dirname, 'tray_icon.png');
     let tray = new Tray(trayIcon)
     const contextMenu = Menu.buildFromTemplate([
@@ -389,12 +415,12 @@ function createWindow() {
         {
             label: '重启', type: 'normal', click: () => {
                 app.relaunch();
-                app.exit(0);
+                exitApp(0);
             }
         },
         {
             label: '退出', type: 'normal', click: () => {
-                app.exit(0)
+                exitApp(0)
             }
         }
     ])
@@ -412,7 +438,7 @@ const isSecondInstance = app.makeSingleInstance(() => {
         mainWindow.show();
     }
 })
-if (isSecondInstance) app.exit(-1)
+if (isSecondInstance) exitApp(-1)
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -421,7 +447,7 @@ function onAppReady() {
     if (isSecondInstance) return;
     //testElectron();
 
-    if(!debugging) setTimeout(checkUpdateAsar, 1000);
+    setTimeout(checkUpdateAsar, 1000);
     createWindow();
 
     mainWindow.webContents.once('did-finish-load', () => {
@@ -456,13 +482,49 @@ app.on('browser-window-created', function (e, window) {
 // ------------------------------------------------------------------------------------------
 // -- 界面事件
 // ------------------------------------------------------------------------------------------
-ipcMain.on('ABYUI_MAIN', (event, method, arg1) => {
+function EventMain(event, method, arg1) {
+    console.log(method, arg1);
     switch (method) {
         case 'GetWowPath':
             getAddOnDir(true);
-            return event.returnValue = null;
+            break;
+        case 'OpenWowPath': {
+            let addOnDir = getAddOnDir();
+            if(addOnDir) {
+                let child = require('child_process').spawn('explorer', [addOnDir], {
+                    detached: true,
+                    stdio: 'ignore',
+                });
+                child.unref();
+            }
+            break;
+        }
+        case 'UpdateAddOn': {
+            let addOnDir = getAddOnDir();
+            let repo = releaseData && releaseData.repos['repo-all'];
+            if(addOnDir && repo && repo.hash) {
+                fire('RepoChecking');
+                downloadRepo('repo-all', repo.hash, addOnDir, false, fire);
+            }
+            break;
+        }
+        case 'CheckAddOnDetail': {
+            let addOnDir = getAddOnDir();
+            let repo = releaseData && releaseData.repos['repo-all'];
+            if(addOnDir && repo && repo.hash) {
+                fire('RepoChecking');
+                downloadRepo('repo-all', repo.hash, addOnDir, true, fire);
+            }
+            break;
+        }
     }
     event.returnValue = null;
+}
+
+ipcMain.on('ABYUI_MAIN', function() {
+    EventMain(...arguments);
+    // const args = Array.from(arguments)
+    // process.nextTick(EventMain, ...args);
 });
 
 async function testElectron() {
@@ -493,5 +555,5 @@ async function testElectron() {
                         return r;
                     })
      */
-    if (true) app.exit(0);
+    if (true) exitApp(0);
 }
