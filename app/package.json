@@ -1,12 +1,12 @@
 {
-  "name": "electron-quick-start",
+  "name": "aby-ui-client",
   "version": "1.0.0",
-  "description": "A minimal Electron application",
+  "description": "AbyUI updater",
   "main": "main.js",
   "scripts": {
     "start": "electron ."
   },
-  "repository": "https://github.com/electron/electron-quick-start",
+  "repository": "https://github.com/aby-ui/repo-release",
   "dependencies": {
     "compare-versions": "^3.3.0",
     "es6-promise-pool": "^2.5.0",
@@ -14,9 +14,6 @@
     "klaw": "^2.1.1",
     "md5-file": "^4.0.0",
     "pretty-bytes": "^5.1.0"
-  },
-  "optionalDependencies": {
-    "regedit": "^3.0.0"
   },
   "author": "warbaby",
   "devDependencies": {

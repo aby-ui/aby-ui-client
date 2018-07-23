@@ -1,5 +1,5 @@
 'use strict'
-const debugging = true;
+const debugging = false;
 let GIT_USER = 'aby-ui';
 
 const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain} = require('electron');
@@ -409,7 +409,7 @@ function createWindow() {
     });
 
     // Open the DevTools.
-    mainWindow.webContents.openDevTools();
+    if(debugging) mainWindow.webContents.openDevTools();
 
     mainWindow.webContents.on('did-finish-load', function () {
         if (mainWindow) {
@@ -488,8 +488,6 @@ function onAppReady() {
     setTimeout(checkUpdateAsar, 1000);
     createWindow();
 
-    dialog.showMessageBox(mainWindow, {message: app.getVersion() });
-
     mainWindow.webContents.once('did-finish-load', () => {
         updateReleaseData();
     });
@@ -545,7 +543,7 @@ function EventMain(event, method, arg1) {
             if (addOnDir && repo && repo.hash) {
                 downloadRepo('repo-base', repo.hash, addOnDir, false, fire)
                     .then(() => {
-                            //删除列表里我们的插件 TODO:如果出现在repo的dirs里，则不删除，否则会循环
+                            //删除列表里我们的插件
                             for (let one of (releaseData["removed-addons"] || [])) {
                                 const tocFile = path.join(addOnDir, one, one + '.toc');
                                 if (fs.existsSync(tocFile)) {
@@ -585,8 +583,6 @@ function EventMain(event, method, arg1) {
 
 ipcMain.on('ABYUI_MAIN', function () {
     EventMain(...arguments);
-    // const args = Array.from(arguments)
-    // process.nextTick(EventMain, ...args);
 });
 
 async function testElectron() {
