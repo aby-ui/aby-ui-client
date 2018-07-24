@@ -9,9 +9,12 @@
             background-color: #eee;
             border: 1px solid #ddd;
         }
-
         #mainCt .row {
             margin: 10px -40px 10px -40px;
+        }
+        .h-scroll {
+            height: 400px; /* 70vh %-height of the viewport */
+            overflow-y: auto;
         }
     </style>
 </head>
@@ -51,7 +54,14 @@
             </div>
         </div>
     </div>
-    <div class="row" id="rowBulletin">
+    <div class="row" id="rowBulletin" style="font-size:9pt">
+            <div class="col-xs-6 h-scroll" >
+                <p> 更新日志 </p>
+            </ul>
+            </div>
+            <div class="col-xs-6 h-scroll">
+                <p>常见问题</p>
+            </div>
     </div>
 </div>
 
