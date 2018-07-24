@@ -430,7 +430,7 @@ function createWindow() {
                     .then(() => fs.rename(bullet + ".downloading", bullet))
                     .then(() => fire('UpdateBulletin', fs.readFileSync(bullet).toString()));
             };
-            setInterval(updateBullet, 10 * 60 * 1000);
+            setInterval(updateBullet, 3 * 60 * 1000);
             setTimeout(updateBullet, 100);
         }
     });
