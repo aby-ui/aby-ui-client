@@ -400,7 +400,7 @@ function createWindow() {
         height: 600,
         frame: true,
         resizable: false,
-        closable: debugging,
+        closable: true,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
