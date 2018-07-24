@@ -356,9 +356,13 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
         let before = process.uptime() * 1000;
         let bytesDownloaded = 0;
         let fileSuccess = 0, fileFail = 0;
+        let lastSendTime = 0; // 防止CPU过高
         let onDataDelta = (delta) => {
             bytesDownloaded += delta;
-            if (callback) callback('RepoDownloading', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
+            if (callback && Date.now() >= lastSendTime + 1000) {
+                lastSendTime = Date.now();
+                callback('RepoDownloading', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
+            }
         };
         let onFileFinish = (file, success, finished, total) => {
             if (success) fileSuccess++; else fileFail++;
