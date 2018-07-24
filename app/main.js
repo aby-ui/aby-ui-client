@@ -5,6 +5,8 @@ let GIT_USER = 'aby-ui';
 const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain} = require('electron');
 const path = require('path'), fs = require('fs-extra')
 
+let status = {}
+
 process.on('uncaughtException', function (error) {
     // Handle the error
     dialog.showErrorBox("出现错误，程序退出", error.stack || "");
@@ -113,11 +115,36 @@ function checkUpdateAddOn() {
 // ------------------------------------------------------------------------------------------
 // -- 定时检查app版本更新, 检查完毕后，每5分钟检查一次，检查失败每2分钟检查意思
 // ------------------------------------------------------------------------------------------
+const {getGitRawUrl} = require('./utils');
+let gitHack = (gitUser, gitRepo, gitHash) => (file, retry) => {
+    if (retry < 2) {
+        return getGitRawUrl('gitlab', true, gitUser, gitRepo, gitHash, file); //官方稳定，但不能续传
+    } else if (retry < 4) {
+        return getGitRawUrl('bitbucket', true, gitUser, gitRepo, gitHash, file); //hack不限量，能续传
+    } else if (retry < 5) {
+        return getGitRawUrl('github', true, gitUser, gitRepo, gitHash, file); //hack不限量，不能续传
+    } else {
+        return undefined;
+    }
+};
+
+let releaseJsonUrl = (file, retry) => {
+    if (retry < 2) {
+        return getGitRawUrl('gitlab', false, GIT_USER, 'repo-release', 'master', file); //官方稳定，但不能续传
+    } else if (retry < 4) {
+        return getGitRawUrl('bitbucket', false, GIT_USER, 'repo-release', 'master', file); //官方稳定，有限量
+    } else if (retry < 6) {
+        return getGitRawUrl('github', false, GIT_USER, 'repo-release', 'master', file); //官方慢
+    } else {
+        return undefined;
+    }
+};
+
 let checkUpdateAsar
 (() => {
     const PROMPT_INTERVAL = 10 * 60 * 1000; //提醒间隔
     const CHECK_INTERVAL = 5 * 60 * 1000;
-    const RETRY_INTERVAL = 2 * 60 * 1000;
+    const RETRY_INTERVAL = 3 * 60 * 1000;
 
     let lastPrompt = 0; //最后一次提醒重启的时间
 
@@ -140,19 +167,11 @@ let checkUpdateAsar
 
     checkUpdateAsar = async function () {
 
-        const {downloadRetry, getGitRawUrl} = require('./utils');
+        if (status.DOWNLOADING) {
+            return setTimeout(checkUpdateAsar, CHECK_INTERVAL)
+        }
 
-        let releaseJsonUrl = (gitUser, gitRepo, gitHash) => (file, retry) => {
-            if (retry < 3) {
-                return getGitRawUrl('gitlab', false, gitUser, gitRepo, gitHash, file); //官方稳定，但不能续传
-            } else if (retry < 4) {
-                return getGitRawUrl('bitbucket', false, gitUser, gitRepo, gitHash, file); //官方稳定，有限量
-            } else if (retry < 6) {
-                return getGitRawUrl('github', false, gitUser, gitRepo, gitHash, file); //官方慢
-            } else {
-                return undefined;
-            }
-        };
+        const {downloadRetry} = require('./utils');
 
         function streamPromise(stream) {
             return new Promise((resolve, reject) => {
@@ -170,7 +189,7 @@ let checkUpdateAsar
         console.log('checking update', verElec, vers);
 
         // 以下这一串里面，需要处理 1.不需要更新 2.需要更新 3.异常，所以要一直传递一个标记。后来不传了，用updated文件是否存在来判断
-        downloadRetry('abyui-release.json', releaseRemote + ".downloading", releaseJsonUrl(GIT_USER, 'repo-release', 'master'))
+        downloadRetry('abyui-release.json', releaseRemote + ".downloading", releaseJsonUrl)
             .then(() => fs.remove(releaseRemote))
             .then(() => fs.rename(releaseRemote + ".downloading", releaseRemote))
             .then(() => updateReleaseData()) //下载后就可以检查插件版本
@@ -291,20 +310,8 @@ function getAddOnDir(manual) {
 let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上更新的话不需要重新计算
 (function () {
 
-    const {downloadRetry, getGitRawUrl, downloadList} = require('./utils');
+    const {downloadRetry, downloadList} = require('./utils');
     const futil = require('./utils');
-
-    let fileToGitRaw = (gitUser, gitRepo, gitHash) => (file, retry) => {
-        if (retry < 2) {
-            return getGitRawUrl('gitlab', false, gitUser, gitRepo, gitHash, file); //官方稳定，但不能续传
-        } else if (retry < 4) {
-            return getGitRawUrl('bitbucket', true, gitUser, gitRepo, gitHash, file); //hack不限量，能续传
-        } else if (retry < 5) {
-            return getGitRawUrl('gitlab', true, gitUser, gitRepo, gitHash, file); //hack不限量，不能续传
-        } else {
-            return undefined;
-        }
-    };
 
     downloadRepo = async function (repo, hash, addOnDir, checkOnly, callback) {
         console.log('======================= downloading repo', repo, hash);
@@ -315,12 +322,12 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
 
         let remote, local, result;
         //使用10秒以内的结果
-        if (!lastCheckResult || Date.now() - lastCheckResult.time > 10 * 1000) {
+        if (!lastCheckResult || Date.now() - lastCheckResult.time > (debugging ? 0 : 10 * 1000)) {
             fire('RepoChecking');
             if (!await fs.pathExists(savePath)) {
                 let bytes = 0;
                 try {
-                    await downloadRetry('.filelist.php', savePath + '.tmp', fileToGitRaw(GIT_USER, repo, hash), delta => console.log('downloaded', bytes += delta));
+                    await downloadRetry('.filelist.php', savePath + '.tmp', gitHack(GIT_USER, repo, hash), delta => console.log('downloaded', bytes += delta));
                     console.log('list file downloaded');
                     await fs.rename(savePath + '.tmp', savePath);
                 } catch (e) {
@@ -332,7 +339,7 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
 
             remote = futil.readJsonGZ(savePath);
             local = await futil.buildFileList(addOnDir, [], false, true);
-            result = await futil.calcDiff(remote, local, addOnDir); //如果不传入addOnDir则只比较size，不计算md5
+            result = await futil.calcDiff(remote, local, addOnDir, (count, total) => fire('RepoChecking', count, total)); //如果不传入addOnDir则只比较size，不计算md5
             lastCheckResult = {remote: remote, result: result, time: Date.now()}
         } else {
             remote = lastCheckResult.remote;
@@ -369,7 +376,7 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
             console.log(finished + ' / ' + total, '    ', bytesDownloaded + ' / ' + downloadsBytes);
             if (callback) callback('RepoDownloading', bytesDownloaded, downloadsBytes, fileSuccess, fileFail, downloadsCount);
         };
-        await downloadList(downloads, addOnDir, fileToGitRaw(GIT_USER, repo, hash), onDataDelta, onFileFinish);
+        await downloadList(downloads, addOnDir, gitHack(GIT_USER, repo, hash), onDataDelta, onFileFinish);
 
         console.log("downloaded", bytesDownloaded, ', time:', process.uptime() * 1000 - before);
 
@@ -413,7 +420,7 @@ function createWindow() {
     });
 
     // Open the DevTools.
-    if(debugging) mainWindow.webContents.openDevTools();
+    if (debugging) mainWindow.webContents.openDevTools();
 
     mainWindow.webContents.on('did-finish-load', function () {
         if (mainWindow) {
@@ -425,12 +432,14 @@ function createWindow() {
             }
             const {downloadRetry} = require('./utils');
             let updateBullet = function () {
-                downloadRetry('https://gitlab.com/aby-ui/repo-release/raw/master/bulletin.html', bullet + ".downloading", 2)
+                downloadRetry('bulletin.html', bullet + ".downloading", releaseJsonUrl)
                     .then(() => fs.remove(bullet))
                     .then(() => fs.rename(bullet + ".downloading", bullet))
-                    .then(() => fire('UpdateBulletin', fs.readFileSync(bullet).toString()));
+                    .then(() => fire('UpdateBulletin', fs.readFileSync(bullet).toString()))
+                    .catch(console.error);
+                ;
             };
-            setInterval(updateBullet, 3 * 60 * 1000);
+            setInterval(updateBullet, 5 * 60 * 1000);
             setTimeout(updateBullet, 100);
         }
     });
@@ -444,9 +453,10 @@ function createWindow() {
         // in an array if your app supports multi windows, this is the time
         // when you should delete the corresponding element.
         // 仅仅隐藏窗口，阻止默认事件执行close()
-        mainWindow.hide();
-        if (!debugging) e.preventDefault(); else mainWindow = null; //正常应该是设置为null, 当全部窗口都关闭时，程序退出
-        console.log('on close prevent');
+        mainWindow = null;
+        // mainWindow.hide();
+        // if (!debugging) e.preventDefault(); else mainWindow = null; //正常应该是设置为null, 当全部窗口都关闭时，程序退出
+        // console.log('on close prevent');
     })
 
     let trayIcon = path.join(__dirname, 'tray_icon.png');
@@ -545,6 +555,7 @@ function EventMain(event, method, arg1) {
             let addOnDir = getAddOnDir();
             let repo = releaseData && releaseData.repos['repo-base'];
             if (addOnDir && repo && repo.hash) {
+                status.DOWNLOADING = true
                 downloadRepo('repo-base', repo.hash, addOnDir, false, fire)
                     .then(() => {
                             //删除列表里我们的插件
@@ -560,14 +571,16 @@ function EventMain(event, method, arg1) {
                                         const backupDir = path.join(addOnDir, '..', 'AddOns爱不易备份');
                                         fs.ensureDirSync(backupDir)
                                         const target = path.join(backupDir, one);
-                                        if(fs.existsSync(target)) fs.removeSync(target);
+                                        if (fs.existsSync(target)) fs.removeSync(target);
                                         fs.moveSync(path.join(addOnDir, one), target)
                                         //fs.removeSync(path.join(addOnDir, one));
                                     }
                                 }
                             }
                         }
-                    );
+                    )
+                    .then(() => status.DOWNLOADING = false)
+                    .catch(() => status.DOWNLOADING = false);
             }
             break;
         }
@@ -576,7 +589,10 @@ function EventMain(event, method, arg1) {
                 let addOnDir = getAddOnDir();
                 let repo = releaseData && releaseData.repos['repo-base'];
                 if (addOnDir && repo && repo.hash) {
-                    downloadRepo('repo-base', repo.hash, addOnDir, true, fire);
+                    status.DOWNLOADING = true
+                    downloadRepo('repo-base', repo.hash, addOnDir, true, fire)
+                        .then(() => status.DOWNLOADING = false)
+                        .catch(() => status.DOWNLOADING = false);
                 }
             })
             break;

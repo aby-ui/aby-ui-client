@@ -1,6 +1,6 @@
 {
   "name": "aby-ui-client",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AbyUI updater",
   "main": "main.js",
   "scripts": {

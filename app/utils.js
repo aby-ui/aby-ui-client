@@ -32,7 +32,8 @@ function download(url, dest, options) {
 
                 const req = net.request(Object.assign({
                     method: options.method || 'GET',
-                    headers: Object.assign({Range: 'bytes=' + start + '-'}, options.headers)
+                    headers: Object.assign({Range: 'bytes=' + start + '-'}, options.headers),
+                    redirect: 'error'
                 }, parsedUrl), res => {
                     options.onresponse && options.onresponse(res)
 
@@ -194,19 +195,12 @@ let getGitRawUrl = (server, githack, gitUser, gitRepo, gitHash, file) => {
         case 'bitbucket':
             return `https://${githack ? 'bbcdn.githack.com' : 'bitbucket.org'}/${gitUser}/${gitRepo}/raw/${gitHash}/${encodeURI(file)}`;
         case 'gitlab':
-            return `https://${githack ? 'glcdn.githack.com' : 'gitlab.com'}/${gitUser}/${gitRepo}/raw/${gitHash}/${encodeURI(file)}`;
+            return `https://${githack ? 'glcdn.githack.com' : 'gitlab.com'}/${gitUser+'2'}/${gitRepo}/raw/${gitHash}/${encodeURI(file)}`;
         case 'github':
             return `https://${githack ? 'rawcdn.githack.com' : 'raw.githubusercontent.com'}/${gitUser}/${gitRepo}/${gitHash}/${encodeURI(file)}`;
         default:
             return undefined;
     }
-};
-
-module.exports = {
-    download: download,
-    downloadRetry: downloadRetry,
-    downloadList: downloadList,
-    getGitRawUrl: getGitRawUrl
 };
 
 // ------------------------------------------------------------------------------------------
@@ -337,13 +331,16 @@ let flatTree = function (dir, pathArray, result) {
  * @param local 本地插件目录生成的filelist，可以不包含md5，但是需要包含空目录，防止目录名和文件名冲突
  * @return {modified: Array, deleted: Array, added: Array, bytes: {total: any, added: (*), modified: (*)}} 其中deleted可能存在目录及目录中的文件，真实删除时可能已经被删除掉了
  */
-async function calcDiff(remote, local, localPathForMD5) {
+async function calcDiff(remote, local, localPathForMD5, callback) {
     if (!local) local = await buildFileList(localPathForMD5, [], false, true);
     let rootActual = local.files ? local.files : local;
     let rootExpect = remote.files ? remote.files : remote;
 
     let expectMap = flatTree(rootExpect, [], {});
     let actualMap = flatTree(rootActual, [], {});
+
+    let total = Object.keys(expectMap).length;
+    let count = 0;
 
     let modified = [], deleted = [], added = [];
     for(let e of Object.entries(expectMap)) {
@@ -378,10 +375,12 @@ async function calcDiff(remote, local, localPathForMD5) {
                 }
             }
         }
+        if(callback) callback(++count, total)
     }
     let totalBytes = Object.values(expectMap).reduce((pre, obj) => pre + obj.size, 0);
     let addedBytes = added.reduce((pre, added) => pre + expectMap[normalizePath(added)].size, 0);
     let modifiedBytes = modified.reduce((pre, modified) => pre + expectMap[normalizePath(modified)].size, 0);
+    if(callback) callback(total, total)
     return {
         modified: modified,
         deleted: deleted,
@@ -394,9 +393,14 @@ async function calcDiff(remote, local, localPathForMD5) {
     };
 }
 
-Object.assign(module.exports, {
+module.exports = {
+    download: download,
+    downloadRetry: downloadRetry,
+    downloadList: downloadList,
+    getGitRawUrl: getGitRawUrl,
+
     buildFileList: buildFileList,
     writeJsonGZ: writeJsonGZ,
     readJsonGZ: readJsonGZ,
     calcDiff: calcDiff
-});
+};
