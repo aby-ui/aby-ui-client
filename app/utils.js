@@ -195,7 +195,7 @@ let getGitRawUrl = (server, githack, gitUser, gitRepo, gitHash, file) => {
         case 'bitbucket':
             return `https://${githack ? 'bbcdn.githack.com' : 'bitbucket.org'}/${gitUser}/${gitRepo}/raw/${gitHash}/${encodeURI(file)}`;
         case 'gitlab':
-            return `https://${githack ? 'glcdn.githack.com' : 'gitlab.com'}/${gitUser+'2'}/${gitRepo}/raw/${gitHash}/${encodeURI(file)}`;
+            return `https://${githack ? 'glcdn.githack.com' : 'gitlab.com'}/${gitUser + '2'}/${gitRepo}/raw/${gitHash}/${encodeURI(file)}`;
         case 'github':
             return `https://${githack ? 'rawcdn.githack.com' : 'raw.githubusercontent.com'}/${gitUser}/${gitRepo}/${gitHash}/${encodeURI(file)}`;
         default:
@@ -230,7 +230,7 @@ let normalizePath = function (onepath) {
  * @param calcMd5 是否计算文件md5
  * @param listEmptyDir 是否列出空目录，例如 'dir' : {}
  */
-function buildFileList(base, ignored, calcMd5, listEmptyDir) {
+function buildFileList(base, ignored, calcMd5, listEmptyDir, callback) {
 
     let deep = function (relative, isFile) {
         if (relative === '.') return root;
@@ -256,6 +256,7 @@ function buildFileList(base, ignored, calcMd5, listEmptyDir) {
         return true;
     };
 
+    let count = 0;
     return new Promise(resolve => {
         let promises = [];
         klaw(base, {nodir: false})
@@ -284,7 +285,7 @@ function buildFileList(base, ignored, calcMd5, listEmptyDir) {
                         }
                     }
                     return resolve2();
-                }));
+                }).then(() => callback && callback(++count)));
             })
             .on('end', () => {
                 Promise.all(promises).then(() => resolve(root))
@@ -343,7 +344,7 @@ async function calcDiff(remote, local, localPathForMD5, callback) {
     let count = 0;
 
     let modified = [], deleted = [], added = [];
-    for(let e of Object.entries(expectMap)) {
+    for (let e of Object.entries(expectMap)) {
         let name = e[0], expect = e[1];
         let actual = actualMap[name];
         let isDir = expect.size === -1;
@@ -375,12 +376,12 @@ async function calcDiff(remote, local, localPathForMD5, callback) {
                 }
             }
         }
-        if(callback) callback(++count, total)
+        if (callback) callback(++count, total)
     }
     let totalBytes = Object.values(expectMap).reduce((pre, obj) => pre + obj.size, 0);
     let addedBytes = added.reduce((pre, added) => pre + expectMap[normalizePath(added)].size, 0);
     let modifiedBytes = modified.reduce((pre, modified) => pre + expectMap[normalizePath(modified)].size, 0);
-    if(callback) callback(total, total)
+    if (callback) callback(total, total)
     return {
         modified: modified,
         deleted: deleted,

@@ -338,7 +338,7 @@ let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上�
             }
 
             remote = futil.readJsonGZ(savePath);
-            local = await futil.buildFileList(addOnDir, [], false, true);
+            local = await futil.buildFileList(addOnDir, [], false, true, count => fire('RepoChecking', count));
             result = await futil.calcDiff(remote, local, addOnDir, (count, total) => fire('RepoChecking', count, total)); //如果不传入addOnDir则只比较size，不计算md5
             lastCheckResult = {remote: remote, result: result, time: Date.now()}
         } else {

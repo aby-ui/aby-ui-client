@@ -108,8 +108,17 @@
             }
             case 'RepoChecking': {
                 window.updating = true;
-                $('#spanUpdateInfo').text(`正在对比文件... ${arg1 ? `${arg1} / ${arg2}` : ''}`);
-                if(arg1) $('#progressBar').css('width', (arg1 * 100 / arg2) + "%");
+                if(arg1) {
+                    if(arg2) {
+                        $('#spanUpdateInfo').text(`正在对比文件... ${arg1} / ${arg2}`);
+                        $('#progressBar').css('width', (20 + (arg1 * 100 / arg2 * 0.8)) + "%");
+                    } else {
+                        $('#spanUpdateInfo').text(`正在对比文件... 文件总数 ${arg1}`);
+                        $('#progressBar').css('width', Math.min(arg1 * 100 / 5000 * 0.20, 20) + "%");
+                    }
+                } else {
+                    $('#spanUpdateInfo').text(`开始对比文件...`);
+                }
                 $('#btnUpdate').attr('disabled', true);
                 $('#btnCheck').attr('disabled', true);
                 break;

@@ -5,8 +5,8 @@ unzip _apptmp.zip -d _apptmp
 pushd _apptmp
 
 @rem npm install -g uglifyes asar
-call uglifyjs -m -c -o main.js main.js
-call uglifyjs -m -c -o utils.js utils.js
+@rem call uglifyjs -m -c -o main.js main.js
+@rem call uglifyjs -m -c -o utils.js utils.js
 
 call npm i --product
 popd
