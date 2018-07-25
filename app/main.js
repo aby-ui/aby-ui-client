@@ -2,7 +2,7 @@
 const debugging = false;
 let GIT_USER = 'aby-ui';
 
-const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain} = require('electron');
+const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain, shell} = require('electron');
 const path = require('path'), fs = require('fs-extra')
 
 let status = {}
@@ -283,9 +283,9 @@ function getAddOnDir(manual) {
         while (true) {
             let chosen = dialog.showOpenDialog(mainWindow, {
                 title: '选择魔兽执行文件',
-                properties: process.platform === 'win32' ? ['openFile'] : ['openDirectory'],
+                properties: ['openFile'],
                 defaultPath: wowPath,
-                filters: process.platform === 'win32' ? [{name: 'Wow', extensions: ['exe']}] : [{name: 'World of Warcraft.app'}]
+                filters: process.platform === 'win32' ? [{name: 'Wow', extensions: ['exe']}] : [{name: 'World of Warcraft',  extensions: ['app']}]
             })
             if (!chosen) break;
             let dir = path.dirname(chosen[0]);
@@ -545,13 +545,8 @@ function EventMain(event, method, arg1) {
             break;
         case 'OpenWowPath': {
             let addOnDir = getAddOnDir();
-            if (addOnDir) {
-                let child = require('child_process').spawn('explorer', [addOnDir], {
-                    detached: true,
-                    stdio: 'ignore',
-                });
-                child.unref();
-            }
+            fs.ensureDirSync(addOnDir);
+            shell.openItem(addOnDir);
             break;
         }
         case 'UpdateAddOn': {
