@@ -33,7 +33,7 @@ function download(url, dest, options) {
                 const req = net.request(Object.assign({
                     method: options.method || 'GET',
                     headers: Object.assign({Range: 'bytes=' + start + '-'}, options.headers),
-                    redirect: 'error'
+                    redirect: 'error' //TODO: agent
                 }, parsedUrl), res => {
                     options.onresponse && options.onresponse(res)
 

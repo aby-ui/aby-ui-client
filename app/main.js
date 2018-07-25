@@ -69,6 +69,7 @@ function updateReleaseData() {
         try {
             releaseData = fs.readJsonSync(releaseRemote);
         } catch (e) {
+            // fs.removeSync(releaseRemote); // 不用删
         }
     }
     checkUpdateAddOn();
