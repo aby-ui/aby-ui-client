@@ -546,13 +546,13 @@ function EventMain(event, method, arg1) {
         case 'OpenWowPath': {
             let addOnDir = getAddOnDir();
             fs.ensureDirSync(addOnDir);
-            shell.openItem(addOnDir);
+            shell.openExternal('file://' + addOnDir);
             break;
         }
         case 'RunWow' : {
             let addOnDir = getAddOnDir();
             if(addOnDir) {
-                shell.openExternal(path.join(addOnDir, '..', '..', wowExecutable));
+                shell.openExternal('file://' + path.join(addOnDir, '..', '..', wowExecutable));
             } else {
                 dialog.showMessageBox(mainWindow, {title: 'aby-ui-client' , type: 'warning', message: `目录下没有${wowExecutable}`});
             }
