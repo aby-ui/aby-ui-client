@@ -30,8 +30,10 @@ function exitApp(code) {
 
 //发送ABYUI_RENDER事件
 function fire() {
-    if (mainWindow && mainWindow.webContents) {
-        mainWindow.webContents.send('ABYUI_RENDER', ...arguments);
+    if (mainWindow) {
+        if (mainWindow.webContents) {
+            mainWindow.webContents.send('ABYUI_RENDER', ...arguments);
+        }
     }
 }
 
@@ -425,7 +427,7 @@ function createWindow() {
 
     mainWindow.webContents.on('did-finish-load', function () {
         if (mainWindow) {
-            mainWindow.setProgressBar(0);
+            // mainWindow.setProgressBar(0);
 
             let bullet = getRes('data/bulletin.html');
             if (fs.existsSync(bullet)) {
