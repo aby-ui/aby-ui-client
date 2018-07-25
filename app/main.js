@@ -412,6 +412,7 @@ function createWindow() {
         frame: true,
         resizable: false,
         closable: true,
+        title: `爱不易 warbaby's ABY-UI v${app.getVersion()}`,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
