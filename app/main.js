@@ -549,6 +549,15 @@ function EventMain(event, method, arg1) {
             shell.openItem(addOnDir);
             break;
         }
+        case 'RunWow' : {
+            let addOnDir = getAddOnDir();
+            if(addOnDir) {
+                shell.openExternal(path.join(addOnDir, '..', '..', wowExecutable));
+            } else {
+                dialog.showMessageBox(mainWindow, {title: 'aby-ui-client' , type: 'warning', message: `目录下没有${wowExecutable}`});
+            }
+            break;
+        }
         case 'UpdateAddOn': {
             let addOnDir = getAddOnDir();
             let repo = releaseData && releaseData.repos['repo-base'];
