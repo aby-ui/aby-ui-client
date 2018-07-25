@@ -18,6 +18,7 @@ process.on('uncaughtException', function (error) {
 const getRes = file => path.join(process.resourcesPath, file);
 const libPath = getRes('lib.asar');
 const requireLib = (module) => require(path.join(libPath, 'node_modules', module));
+const wowExecutable = process.platform === 'win32' ? 'Wow.exe' : 'World of Warcraft.app';
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -261,9 +262,8 @@ let checkUpdateAsar
 })();
 
 function _isWowPathVaid(wowPath) {
-    //TODO mac
     if (wowPath && wowPath.trim().length > 0) {
-        return fs.existsSync(path.join(wowPath, 'Wow.exe'));
+        return fs.existsSync(path.join(wowPath, wowExecutable));
     }
 }
 
@@ -283,9 +283,9 @@ function getAddOnDir(manual) {
         while (true) {
             let chosen = dialog.showOpenDialog(mainWindow, {
                 title: '选择魔兽执行文件',
-                properties: ['openFile'],
+                properties: process.platform === 'win32' ? ['openFile'] : ['openDirectory'],
                 defaultPath: wowPath,
-                filters: [{name: 'Wow', extensions: ['exe']}]
+                filters: process.platform === 'win32' ? [{name: 'Wow', extensions: ['exe']}] : [{name: 'World of Warcraft.app'}]
             })
             if (!chosen) break;
             let dir = path.dirname(chosen[0]);
