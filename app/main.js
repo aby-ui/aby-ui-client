@@ -461,27 +461,29 @@ function createWindow() {
         // if (!debugging) e.preventDefault(); else mainWindow = null; //正常应该是设置为null, 当全部窗口都关闭时，程序退出
         // console.log('on close prevent');
     })
-
-    let trayIcon = path.join(__dirname, 'tray_icon.png');
-    tray = new Tray(trayIcon)
-    const contextMenu = Menu.buildFromTemplate([
-        {label: '爱不易插件', sublabel: 'aby-ui'},
-        {type: 'separator'},
-        {
-            label: '重启', type: 'normal', click: () => {
-                app.relaunch();
-                exitApp(0);
+    
+    if(process.platform === 'win32') {
+        let trayIcon = path.join(__dirname, 'tray_icon.png');
+        tray = new Tray(trayIcon)
+        const contextMenu = Menu.buildFromTemplate([
+            {label: '爱不易插件', sublabel: 'aby-ui'},
+            {type: 'separator'},
+            {
+                label: '重启', type: 'normal', click: () => {
+                    app.relaunch();
+                    exitApp(0);
+                }
+            },
+            {
+                label: '退出', type: 'normal', click: () => {
+                    exitApp(0)
+                }
             }
-        },
-        {
-            label: '退出', type: 'normal', click: () => {
-                exitApp(0)
-            }
-        }
-    ])
-    tray.setToolTip('爱不易插件更新器')
-    tray.setContextMenu(contextMenu)
-    tray.on('click', () => mainWindow.show());
+        ])
+        tray.setToolTip('爱不易插件更新器')
+        tray.setContextMenu(contextMenu)
+        tray.on('click', () => mainWindow.show());
+    }
 }
 
 const isSecondInstance = app.makeSingleInstance(() => {
@@ -527,6 +529,12 @@ app.on('activate', function () {
     // dock icon is clicked and there are no other windows open.
     if (mainWindow === null) {
         createWindow()
+        mainWindow.webContents.once('did-finish-load', () => {
+            updateReleaseData();
+            if(status.DOWNLOADING) {
+                fire('RepoBeginDownloading');
+            }
+        });
     }
 });
 
