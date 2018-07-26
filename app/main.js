@@ -2,7 +2,7 @@
 const debugging = false;
 let GIT_USER = 'aby-ui';
 
-const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain} = require('electron');
+const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain, shell} = require('electron');
 const path = require('path'), fs = require('fs-extra')
 
 let status = {}
@@ -18,6 +18,7 @@ process.on('uncaughtException', function (error) {
 const getRes = file => path.join(process.resourcesPath, file);
 const libPath = getRes('lib.asar');
 const requireLib = (module) => require(path.join(libPath, 'node_modules', module));
+const wowExecutable = process.platform === 'win32' ? 'Wow.exe' : 'World of Warcraft.app';
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -30,8 +31,10 @@ function exitApp(code) {
 
 //发送ABYUI_RENDER事件
 function fire() {
-    if (mainWindow && mainWindow.webContents) {
-        mainWindow.webContents.send('ABYUI_RENDER', ...arguments);
+    if (mainWindow) {
+        if (mainWindow.webContents) {
+            mainWindow.webContents.send('ABYUI_RENDER', ...arguments);
+        }
     }
 }
 
@@ -260,9 +263,8 @@ let checkUpdateAsar
 })();
 
 function _isWowPathVaid(wowPath) {
-    //TODO mac
     if (wowPath && wowPath.trim().length > 0) {
-        return fs.existsSync(path.join(wowPath, 'Wow.exe'));
+        return fs.existsSync(path.join(wowPath, wowExecutable));
     }
 }
 
@@ -284,7 +286,7 @@ function getAddOnDir(manual) {
                 title: '选择魔兽执行文件',
                 properties: ['openFile'],
                 defaultPath: wowPath,
-                filters: [{name: 'Wow', extensions: ['exe']}]
+                filters: process.platform === 'win32' ? [{name: 'Wow', extensions: ['exe']}] : [{name: 'World of Warcraft',  extensions: ['app']}]
             })
             if (!chosen) break;
             let dir = path.dirname(chosen[0]);
@@ -413,6 +415,7 @@ function createWindow() {
         frame: true,
         resizable: false,
         closable: true,
+        title: `爱不易 warbaby's ABY-UI v${app.getVersion()}`,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
@@ -425,7 +428,7 @@ function createWindow() {
 
     mainWindow.webContents.on('did-finish-load', function () {
         if (mainWindow) {
-            mainWindow.setProgressBar(0);
+            // mainWindow.setProgressBar(0);
 
             let bullet = getRes('data/bulletin.html');
             if (fs.existsSync(bullet)) {
@@ -543,12 +546,16 @@ function EventMain(event, method, arg1) {
             break;
         case 'OpenWowPath': {
             let addOnDir = getAddOnDir();
-            if (addOnDir) {
-                let child = require('child_process').spawn('explorer', [addOnDir], {
-                    detached: true,
-                    stdio: 'ignore',
-                });
-                child.unref();
+            fs.ensureDirSync(addOnDir);
+            shell.openExternal('file://' + addOnDir);
+            break;
+        }
+        case 'RunWow' : {
+            let addOnDir = getAddOnDir();
+            if(addOnDir) {
+                shell.openExternal('file://' + path.join(addOnDir, '..', '..', wowExecutable));
+            } else {
+                dialog.showMessageBox(mainWindow, {title: 'aby-ui-client' , type: 'warning', message: `目录下没有${wowExecutable}`});
             }
             break;
         }
