@@ -285,7 +285,7 @@ function getAddOnDir(manual) {
                 title: '选择魔兽执行文件',
                 properties: ['openFile'],
                 defaultPath: wowPath,
-                filters: process.platform === 'win32' ? [{name: 'Wow', extensions: ['exe']}] : [{name: 'World of Warcraft',  extensions: ['app']}]
+                filters: process.platform === 'win32' ? [{name: 'Wow', extensions: ['exe']}] : [{name: 'World of Warcraft', extensions: ['app']}]
             })
             if (!chosen) break;
             let dir = path.dirname(chosen[0]);
@@ -423,7 +423,28 @@ function createWindow() {
     });
 
     // Open the DevTools.
-    if (debugging) mainWindow.webContents.openDevTools();
+    if (debugging) mainWindow.webContents.openDevTools({mode: "bottom"});
+
+    mainWindow.webContents.on('before-input-event', function (event, input) {
+        if (!mainWindow || !mainWindow.webContents) return;
+        if (input.type === 'keyUp' && input.key === 'F12' && input.control) {
+            if (mainWindow.webContents.isDevToolsOpened()) {
+                mainWindow.webContents.closeDevTools();
+            } else {
+                mainWindow.webContents.openDevTools({mode: "bottom"});
+            }
+        }
+    });
+
+    let handleRedirect = (e, url) => {
+        if(url != mainWindow.webContents.getURL()) {
+            e.preventDefault()
+            require('electron').shell.openExternal(url)
+        }
+    }
+
+    mainWindow.webContents.on('will-navigate', handleRedirect)
+    mainWindow.webContents.on('new-window', handleRedirect)
 
     mainWindow.webContents.on('did-finish-load', function () {
         if (mainWindow) {
@@ -440,7 +461,6 @@ function createWindow() {
                     .then(() => fs.rename(bullet + ".downloading", bullet))
                     .then(() => fire('UpdateBulletin', fs.readFileSync(bullet).toString()))
                     .catch(console.error);
-                ;
             };
             setInterval(updateBullet, 5 * 60 * 1000);
             setTimeout(updateBullet, 100);
@@ -559,10 +579,10 @@ function EventMain(event, method, arg1) {
         }
         case 'RunWow' : {
             let addOnDir = getAddOnDir();
-            if(addOnDir) {
+            if (addOnDir) {
                 shell.openExternal('file://' + path.join(addOnDir, '..', '..', wowExecutable));
             } else {
-                dialog.showMessageBox(mainWindow, {title: 'aby-ui-client' , type: 'warning', message: `目录下没有${wowExecutable}`});
+                dialog.showMessageBox(mainWindow, {title: 'aby-ui-client', type: 'warning', message: `目录下没有${wowExecutable}`});
             }
             break;
         }
