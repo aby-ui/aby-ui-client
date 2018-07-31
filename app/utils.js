@@ -398,13 +398,13 @@ async function calcDiff(remote, local, localPathForMD5, callback) {
 }
 
 module.exports = {
-    download: download,
-    downloadRetry: downloadRetry,
-    downloadList: downloadList,
-    getGitRawUrl: getGitRawUrl,
+    download,
+    downloadRetry,
+    downloadList,
+    getGitRawUrl,
 
-    buildFileList: buildFileList,
-    writeJsonGZ: writeJsonGZ,
-    readJsonGZ: readJsonGZ,
-    calcDiff: calcDiff
+    buildFileList,
+    writeJsonGZ,
+    readJsonGZ,
+    calcDiff
 };
