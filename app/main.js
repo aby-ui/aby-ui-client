@@ -437,8 +437,12 @@ function createWindow() {
         }
     });
 
+    mainWindow.webContents.on('destroyed', function() {
+        if(mainWindow) mainWindow.webContents = null;
+    })
+
     let handleRedirect = (e, url) => {
-        if(url != mainWindow.webContents.getURL()) {
+        if(url !== mainWindow.webContents.getURL()) {
             e.preventDefault()
             require('electron').shell.openExternal(url)
         }
