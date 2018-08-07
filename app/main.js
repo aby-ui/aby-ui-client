@@ -3,7 +3,8 @@ const debugging = false;
 let GIT_USER = 'aby-ui';
 
 const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain, shell} = require('electron');
-const path = require('path'), fs = require('fs-extra')
+const path = require('path'), fs = require('fs-extra'), childProc = require('child_process')
+
 
 let status = {}
 
@@ -18,7 +19,8 @@ process.on('uncaughtException', function (error) {
 const getRes = file => path.join(process.resourcesPath, file);
 const libPath = getRes('lib.asar');
 const requireLib = (module) => require(path.join(libPath, 'node_modules', module));
-const wowExecutable = process.platform === 'win32' ? 'Wow.exe' : 'World of Warcraft.app';
+const isWin32 = process.platform === 'win32';
+const wowExecutable = isWin32 ? 'Wow.exe' : 'World of Warcraft.app';
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -117,7 +119,7 @@ function checkUpdateAddOn() {
 }
 
 // ------------------------------------------------------------------------------------------
-// -- 定时检查app版本更新, 检查完毕后，每5分钟检查一次，检查失败每2分钟检查意思
+// -- 定时检查app版本更新, 检查完毕后，每5分钟检查一次，检查失败每2分钟检查一次
 // ------------------------------------------------------------------------------------------
 const {getGitRawUrl} = require('./utils');
 let gitHack = (gitUser, gitRepo, gitHash) => (file, retry) => {
@@ -278,18 +280,16 @@ function getAddOnDir(manual) {
     let wowPath = localData.currWowPath;
     if (!_isWowPathVaid(wowPath)) wowPath = undefined;
 
-    //TODO regedit win32
-
     if (manual) {
         while (true) {
             let chosen = dialog.showOpenDialog(mainWindow, {
                 title: '选择魔兽执行文件',
-                properties: ['openFile'],
+                properties: ['openFile', 'openDirectory'],
                 defaultPath: wowPath,
                 filters: process.platform === 'win32' ? [{name: 'Wow', extensions: ['exe']}] : [{name: 'World of Warcraft', extensions: ['app']}]
             })
             if (!chosen) break;
-            let dir = path.dirname(chosen[0]);
+            let dir = fs.statSync(chosen[0]).isDirectory() ? chosen[0] : path.dirname(chosen[0]);
             if (_isWowPathVaid(dir)) {
                 wowPath = dir;
                 localData.currWowPath = wowPath;
@@ -299,6 +299,21 @@ function getAddOnDir(manual) {
             } else {
                 dialog.showMessageBox(mainWindow, {title: '选择无效', type: 'warning', message: '目录下没有 Wow.exe 文件，请重新选择!'});
             }
+        }
+    } else {
+        //读取注册表
+        if(!wowPath && isWin32) {
+            try {
+                let buf = childProc.execSync('reg QUERY "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Blizzard Entertainment\\World of Warcraft" /v InstallPath');
+                let match = buf && buf.toString().match(/.*InstallPath[ \t]+REG_SZ[ \t]+(.*)/);
+                wowPath = match && match[1];
+                if(wowPath) console.log('find wowPath from registry', wowPath);
+                if (_isWowPathVaid(wowPath)) {
+                    localData.currWowPath = wowPath;
+                    saveLocalData();
+                    checkUpdateAddOn();
+                }
+            } catch (e) {}
         }
     }
 
@@ -437,12 +452,12 @@ function createWindow() {
         }
     });
 
-    mainWindow.webContents.on('destroyed', function() {
-        if(mainWindow) mainWindow.webContents = null;
+    mainWindow.webContents.on('destroyed', function () {
+        if (mainWindow) mainWindow.webContents = null;
     })
 
     let handleRedirect = (e, url) => {
-        if(url !== mainWindow.webContents.getURL()) {
+        if (url !== mainWindow.webContents.getURL()) {
             e.preventDefault()
             require('electron').shell.openExternal(url)
         }
@@ -486,8 +501,8 @@ function createWindow() {
         // if (!debugging) e.preventDefault(); else mainWindow = null; //正常应该是设置为null, 当全部窗口都关闭时，程序退出
         // console.log('on close prevent');
     })
-    
-    if(process.platform === 'win32') {
+
+    if (process.platform === 'win32') {
         let trayIcon = path.join(__dirname, 'tray_icon.png');
         tray = new Tray(trayIcon)
         const contextMenu = Menu.buildFromTemplate([
@@ -556,7 +571,7 @@ app.on('activate', function () {
         createWindow()
         mainWindow.webContents.once('did-finish-load', () => {
             updateReleaseData();
-            if(status.DOWNLOADING) {
+            if (status.DOWNLOADING) {
                 fire('RepoBeginDownloading');
             }
         });
