@@ -21,6 +21,7 @@ const libPath = getRes('lib.asar');
 const requireLib = (module) => require(path.join(libPath, 'node_modules', module));
 const isWin32 = process.platform === 'win32';
 const wowExecutable = isWin32 ? 'Wow.exe' : 'World of Warcraft.app';
+const bnetExecutable = isWin32 ? 'Battle.net Launcher.exe' : 'Battle.net.app/Contents/MacOS/Battle.net.sh';
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -283,8 +284,8 @@ function getAddOnDir(manual) {
     if (manual) {
         while (true) {
             let chosen = dialog.showOpenDialog(mainWindow, {
-                title: '选择魔兽执行文件',
-                properties: ['openFile', 'openDirectory'],
+                title: '选择魔兽目录',
+                properties: ['openDirectory'],
                 defaultPath: wowPath,
                 filters: process.platform === 'win32' ? [{name: 'Wow', extensions: ['exe']}] : [{name: 'World of Warcraft', extensions: ['app']}]
             })
@@ -305,7 +306,7 @@ function getAddOnDir(manual) {
         if(!wowPath && isWin32) {
             try {
                 let buf = childProc.execSync('reg QUERY "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Blizzard Entertainment\\World of Warcraft" /v InstallPath');
-                let match = buf && buf.toString().match(/.*InstallPath[ \t]+REG_SZ[ \t]+(.*)/);
+                let match = buf && buf.toString().match(/.*InstallPath[ \t]+REG_SZ[ \t]+"?(.*?)"?/);
                 wowPath = match && match[1];
                 if(wowPath) console.log('find wowPath from registry', wowPath);
                 if (_isWowPathVaid(wowPath)) {
@@ -313,7 +314,9 @@ function getAddOnDir(manual) {
                     saveLocalData();
                     checkUpdateAddOn();
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.warn(e);
+            }
         }
     }
 
@@ -324,6 +327,53 @@ function getAddOnDir(manual) {
         return path.resolve(path.join(wowPath, 'Interface/AddOns'));
     }
 }
+
+function _isBNetPathVaid(dir) {
+    if (dir && dir.trim().length > 0) {
+        return fs.existsSync(path.join(dir, bnetExecutable));
+    }
+}
+
+// 获取战网路径
+function getBNetPath() {
+
+    let wowPath = localData.battlenetPath;
+    if (!_isBNetPathVaid(wowPath)) wowPath = undefined;
+
+    if(!wowPath && isWin32) {
+        try {
+            let buf = childProc.execSync('reg QUERY HKEY_CLASSES_ROOT\\battlenet\\shell\\open\\command /ve');
+            let match = buf && buf.toString().match(/\(.+\)[ \t]+REG_SZ[ \t]+"?(.*battle.net.exe.*?)"? "%1".*/i)
+            wowPath = match && path.dirname(match[1]);
+            if(wowPath) console.log('find BNPath from registry', wowPath);
+            if (!_isBNetPathVaid(wowPath)) wowPath = undefined;
+        } catch (e) {
+            console.warn(e);
+        }
+    }
+
+
+    if (!wowPath) {
+        while (true) {
+            let chosen = dialog.showOpenDialog(mainWindow, {
+                title: '选择战网目录',
+                properties: ['openDirectory']
+            })
+            if (!chosen) break;
+            let wowPath = fs.statSync(chosen[0]).isDirectory() ? chosen[0] : path.dirname(chosen[0]);
+            if (_isBNetPathVaid(wowPath)) break;
+            wowPath = undefined;
+            dialog.showMessageBox(mainWindow, {title: '选择无效', type: 'warning', message: '目录下没有 Wow.exe 文件，请重新选择!'});
+        }
+    }
+
+    if (wowPath) {
+        localData.battlenetPath = wowPath;
+        saveLocalData();
+        return wowPath;
+    }
+}
+
 
 let downloadRepo, lastCheckResult; //lastCheckResult是为了check之后马上更新的话不需要重新计算
 (function () {
@@ -603,6 +653,15 @@ function EventMain(event, method, arg1) {
                 shell.openExternal('file://' + path.join(addOnDir, '..', '..', wowExecutable));
             } else {
                 dialog.showMessageBox(mainWindow, {title: 'aby-ui-client', type: 'warning', message: `目录下没有${wowExecutable}`});
+            }
+            break;
+        }
+        case 'RunBattleNet' : {
+            let dir = getBNetPath();
+            if (dir) {
+                shell.openExternal('file://' + path.join(dir, bnetExecutable));
+            } else {
+                dialog.showMessageBox(mainWindow, {title: 'aby-ui-client', type: 'warning', message: `没有找到暴雪战网启动文件 ${wowExecutable}`});
             }
             break;
         }
