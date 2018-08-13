@@ -5,5 +5,6 @@
     <file url="file://$PROJECT_DIR$/build-app.bat" charset="GBK" />
     <file url="file://$PROJECT_DIR$/build-lib.bat" charset="GBK" />
     <file url="file://$PROJECT_DIR$/pack-release.bat" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/pack-updater.bat" charset="GBK" />
   </component>
 </project>
