@@ -13,7 +13,7 @@ popd
 mkdir _build
 call asar p _apptmp _build\app.asar
 
-copy _build\app.asar _package\AbyUI-win32-x64\resources
+copy _build\app.asar _package\AbyUI-win32-ia32\resources
 
 gzip -f _build\app.asar
 rm -fr _apptmp

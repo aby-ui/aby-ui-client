@@ -309,11 +309,12 @@ function getAddOnDir(manual) {
         }
     } else {
         //读取注册表
-        if(!wowPath && isWin32) {
+        if(!_isWowPathVaid(wowPath) && isWin32) {
             try {
                 let buf = childProc.execSync('reg QUERY "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Blizzard Entertainment\\World of Warcraft" /v InstallPath');
-                let match = buf && buf.toString().match(/.*InstallPath[ \t]+REG_SZ[ \t]+"?(.*?)"?/);
-                wowPath = match && match[1];
+                let match = buf && buf.toString().match(/.*InstallPath[ \t]+REG_SZ[ \t]+"?(.+)"?/);
+                console.info(buf.toString(), match)
+                wowPath = match && match[1].trim();
                 if(wowPath) console.log('find wowPath from registry', wowPath);
                 if (_isWowPathVaid(wowPath)) {
                     localData.currWowPath = wowPath;
@@ -349,8 +350,9 @@ function getBNetPath() {
     if(!wowPath && isWin32) {
         try {
             let buf = childProc.execSync('reg QUERY HKEY_CLASSES_ROOT\\battlenet\\shell\\open\\command /ve');
-            let match = buf && buf.toString().match(/\(.+\)[ \t]+REG_SZ[ \t]+"?(.*battle.net.exe.*?)"? "%1".*/i)
-            wowPath = match && path.dirname(match[1]);
+            let match = buf && buf.toString().match(/\(.+\)[ \t]+REG_SZ[ \t]+"?(.*battle.net.exe.*)"? "%1".*/i)
+            console.log(buf, match)
+            wowPath = match && path.dirname(match[1].trim());
             if(wowPath) console.log('find BNPath from registry', wowPath);
             if (!_isBNetPathVaid(wowPath)) wowPath = undefined;
         } catch (e) {
