@@ -66,6 +66,10 @@ function saveLocalData() {
     fs.writeJsonSync(localJsonPath, localData);
 }
 
+function fireLineSelected() {
+    fire('LineSelected', localData.updateLine);
+}
+
 // 更新器下载的临时文件
 let releaseData; //最后一次读取到的更新数据
 let releaseRemote = getRes('data/abyui-release.json.remote');
@@ -125,7 +129,8 @@ function checkUpdateAddOn() {
 const {getGitRawUrl} = require('./utils');
 let gitHack = (gitUser, gitRepo, gitHash) => (file, retry) => {
     if (retry < 2) {
-        return getGitRawUrl('gitlab', true, gitUser, gitRepo, gitHash, file); //官方稳定，但不能续传
+        const primaryUpdateLine = localData.updateLine === 'gitee' ? 'gitee' : 'gitlab';
+        return getGitRawUrl(primaryUpdateLine, true, gitUser, gitRepo, gitHash, file); //官方稳定，但不能续传
     } else if (retry < 4) {
         return getGitRawUrl('bitbucket', true, gitUser, gitRepo, gitHash, file); //hack不限量，能续传
     } else if (retry < 5) {
@@ -137,7 +142,8 @@ let gitHack = (gitUser, gitRepo, gitHash) => (file, retry) => {
 
 let releaseJsonUrl = (file, retry) => {
     if (retry < 2) {
-        return getGitRawUrl('gitlab', false, GIT_USER, 'repo-release', 'master', file); //官方稳定，但不能续传
+        const primaryUpdateLine = localData.updateLine === 'gitee' ? 'gitee' : 'gitlab';
+        return getGitRawUrl(primaryUpdateLine, false, GIT_USER, 'repo-release', 'master', file); //官方稳定，但不能续传
     } else if (retry < 4) {
         return getGitRawUrl('bitbucket', false, GIT_USER, 'repo-release', 'master', file); //官方稳定，有限量
     } else if (retry < 6) {
@@ -534,6 +540,7 @@ function createWindow() {
             };
             setInterval(updateBullet, 5 * 60 * 1000);
             setTimeout(updateBullet, 100);
+            setTimeout(fireLineSelected, 100);
         }
     });
 
@@ -709,6 +716,12 @@ function EventMain(event, method, arg1) {
                         .catch(() => status.DOWNLOADING = false);
                 }
             })
+            break;
+        }
+        case 'ChooseUpdateServer': {
+            localData.updateLine = arg1 === "gitee" ? "gitee" : "normal";
+            saveLocalData();
+            fireLineSelected();
             break;
         }
     }

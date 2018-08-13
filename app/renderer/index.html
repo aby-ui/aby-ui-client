@@ -27,7 +27,7 @@
         <div class="col-xs-7" style="margin-top: 6px">
             <span id="spanWowPath" style="font-size: 14px; cursor: pointer" onmouseup="fire('OpenWowPath')"></span>
         </div>
-        <div class="col-xs-3" align="left">
+        <div class="col-xs-3" align="right">
             <div class="btn-group">
                 <button type="button" class="btn btn-warning" onclick="fire('RunWow')">启动魔兽</button>
                 <button type="button" class="btn btn-warning dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -48,8 +48,18 @@
         <div class="col-xs-7" style="margin-top: 6px">
             <span id="spanUpdateInfo" style="font-size: 12px;"></span>
         </div>
-        <div class="col-xs-3" align="left">
-            <button id='btnCheck' type="button" class="btn btn-primary" onclick="fire('CheckAddOnDetail')">详细检查</button>
+        <div class="col-xs-3" align="right">
+            <div class="btn-group">
+                <button id='btnCheck' type="button" class="btn btn-primary" onclick="fire('CheckAddOnDetail')">详细检查</button>
+                <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <span class="caret"></span>
+                    <span class="sr-only">选择更新线路</span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li id="line_normal"><a href="#" onclick="fire('ChooseUpdateServer', 'normal')">使用常规线路</a></li>
+                    <li id="line_gitee"><a href="#" onclick="fire('ChooseUpdateServer', 'gitee')">使用测试线路</a></li>
+                </ul>
+            </div>
         </div>
     </div>
     <div class="row">
@@ -177,6 +187,16 @@
                 $('#btnCheck').attr('disabled', false);
                 window.updating = false;
                 break;
+            }
+            case 'LineSelected': {
+                if(arg1 === 'gitee') {
+                    $('#line_gitee').addClass('active');
+                    $('#line_normal').removeClass('active');
+                } else {
+                    $('#line_normal').addClass('active');
+                    $('#line_gitee').removeClass('active');
+
+                }
             }
 
         }

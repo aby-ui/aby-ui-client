@@ -201,6 +201,8 @@ let getGitRawUrl = (server, githack, gitUser, gitRepo, gitHash, file) => {
             return `https://${githack ? 'glcdn.githack.com' : 'gitlab.com'}/${gitUser + '2'}/${gitRepo}/raw/${gitHash}/${encodeURI(file)}`;
         case 'github':
             return `https://${githack ? 'rawcdn.githack.com' : 'raw.githubusercontent.com'}/${gitUser}/${gitRepo}/${gitHash}/${encodeURI(file)}`;
+        case 'gitee':
+            return `https://${githack ? 'gitee.com' : 'gitee.com'}/${gitUser + '2'}/${gitRepo}/raw/${gitHash}/${encodeURI(file)}`;
         default:
             return undefined;
     }
