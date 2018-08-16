@@ -1,1 +1,1 @@
-"c:\Program Files\WinRAR\WinRAR.exe" a -m5 -r -s -sfx -zwinrar.txt -ep1 _package\爱不易更新器1.0.4测试版 _package\AbyUI-win32-ia32\*
+"c:\Program Files\WinRAR\WinRAR.exe" a -m5 -r -s -sfx -zwinrar.txt -ep1 _package\爱不易更新器-win-1.0.4测试版 _package\AbyUI-win32-ia32\*
