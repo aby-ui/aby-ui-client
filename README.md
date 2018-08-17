@@ -1,49 +1,59 @@
-# mirror
+# 爱不易插件更新器
+项目基于 https://github.com/electron/electron-quick-start
 
-ELECTRON_MIRROR=https://npm.taobao.org/mirrors/electron/
-npm --registry=https://registry.npm.taobao.org
-
-# electron-quick-start
-
-**Clone and run for a quick way to see Electron in action.**
-
-This is a minimal Electron application based on the [Quick Start Guide](https://electronjs.org/docs/tutorial/quick-start) within the Electron documentation.
-
-**Use this app along with the [Electron API Demos](https://electronjs.org/#get-started) app for API code examples to help you get started.**
-
-A basic Electron application needs just these files:
-
-- `package.json` - Points to the app's main file and lists its details and dependencies.
-- `main.js` - Starts the app and creates a browser window to render HTML. This is the app's **main process**.
-- `index.html` - A web page to render. This is the app's **renderer process**.
-
-You can learn more about each of these components within the [Quick Start Guide](https://electronjs.org/docs/tutorial/quick-start).
-
-## To Use
-
-To clone and run this repository you'll need [Git](https://git-scm.com) and [Node.js](https://nodejs.org/en/download/) (which comes with [npm](http://npmjs.com)) installed on your computer. From your command line:
-
+## 安装
 ```bash
-# Clone this repository
-git clone https://github.com/electron/electron-quick-start
-# Go into the repository
-cd electron-quick-start
-# Install dependencies
-npm install
-# Run the app
+git clone https://github.com/aby-ui/aby-ui-client
+cd aby-ui-client
+# app目录是主程序
+
+cd app
+# npm intall 的时候需要下载electron, 国内指定一下镜像
+set ELECTRON_MIRROR=https://npm.taobao.org/mirrors/electron/
+npm install --registry=https://registry.npm.taobao.org
+
+# 启动electron
 npm start
 ```
 
-Note: If you're using Linux Bash for Windows, [see this guide](https://www.howtogeek.com/261575/how-to-run-graphical-linux-desktop-applications-from-windows-10s-bash-shell/) or use `node` from the command prompt.
+## 发布
+```bash
+# 安装electron打包工具
+npm -g i electron-packager
 
-## Resources for Learning Electron
+# 打包到_package/AbyUI-win32-ia32目录中
+# 基本就是把electron的发行包改一下exe版本和图标而已
+electron-packager ./app AbyUI --executable-name=爱不易插件 --platform=win32 --arch=ia32 --icon 163UI-light.ico --asar --out=_package --overwrite
 
-- [electronjs.org/docs](https://electronjs.org/docs) - all of Electron's documentation
-- [electronjs.org/community#boilerplates](https://electronjs.org/community#boilerplates) - sample starter apps created by the community
-- [electron/electron-quick-start](https://github.com/electron/electron-quick-start) - a very basic starter Electron app
-- [electron/simple-samples](https://github.com/electron/simple-samples) - small applications with ideas for taking them further
-- [electron/electron-api-demos](https://github.com/electron/electron-api-demos) - an Electron app that teaches you how to use Electron
-- [hokein/electron-sample-apps](https://github.com/hokein/electron-sample-apps) - small demo apps for the various Electron APIs
+# 用product模式安装app，打包到resources/app.asar里
+build-app.bat
+
+# 用product模式安装app-lib，打包到resources/app-lib.asar里
+build-lib.bat
+
+# 修改 resources/electron.asar
+build-electron-hack.bat
+```
+
+## 更新器自身更新逻辑
+1. 打包时，根据package.json里的version，发布到 https://github.com/aby-ui/repo-release/blob/master/abyui-release.json 里
+2. 定时检查读取 https://github.com/aby-ui/repo-release/blob/master/abyui-release.json 如果发现版本大于当前app版本，则下载 app.asar.gz，解压为app-updated.asar，提示重启。
+3. 重启时，修改的electron.asar会自动将app-updated.asar改为app.asar，完成升级
+4. 定时读取 https://github.com/aby-ui/repo-release/blob/master/bulletin.html 将html片段嵌入更新器的主页面
+
+## 插件更新逻辑
+1. 插件代码提交后，将commit-hash存到上面的abyui-release.json里
+2. 发布时用脚本遍历插件目录，计算每个文件的md5，发布到repo-base/filelist.json里
+3. 定时检测，如果发现hash和当前魔兽目录下保存的abyui-repos.json不同，则提示插件更新
+4. 用户点击更新或检查时，读取filelist.json.gz (filelist.php)，与本地文件对比，下载需要更新的文件
+5. （单文件更新效率有点差，需要更先进一点的机制。最初设计的时候是不同插件在不同的repos里，这样可以利用git的打包下载机制）
+
+## 遗留问题
+- request RESET 和 ABORT 的时候会直接退出，很纳闷，谁给帮忙看看……
+- 打包脚本都是bat的，抽空改成node的
+- 插件目录生成filelist.json的脚本在另一个项目里，正准备合过来
+- 代码毫无结构可言，本来是想弄到一个文件里直接uglify一下，所以没拆分
+- 基本不会写前端代码，请勿吐槽
 
 ## License
 
