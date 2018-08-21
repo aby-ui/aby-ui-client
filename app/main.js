@@ -23,7 +23,7 @@ const libPath = getRes('lib.asar');
 const requireLib = (module) => require(path.join(libPath, 'node_modules', module));
 const isWin32 = process.platform === 'win32';
 const wowExecutable = isWin32 ? 'Wow.exe' : 'World of Warcraft.app';
-const bnetExecutable = isWin32 ? 'Battle.net Launcher.exe' : 'Battle.net.app/Contents/MacOS/Battle.net.sh';
+const bnetExecutable = isWin32 ? 'Battle.net Launcher.exe' : 'Battle.net.app';
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -349,19 +349,22 @@ function getBNetPath() {
     let bnetPath = localData.battlenetPath;
     if (!_isBNetPathVaid(bnetPath)) bnetPath = undefined;
 
-    if(!bnetPath && isWin32) {
-        try {
-            let buf = childProc.execSync('reg QUERY HKEY_CLASSES_ROOT\\battlenet\\shell\\open\\command /ve');
-            let match = buf && buf.toString().match(/\(.+\)[ \t]+REG_SZ[ \t]+"?(.*battle.net.exe.*)"? "%1".*/i)
-            console.log(buf, match)
-            bnetPath = match && path.dirname(match[1].trim());
-            if(bnetPath) console.log('find BNPath from registry', bnetPath);
-            if (!_isBNetPathVaid(bnetPath)) bnetPath = undefined;
-        } catch (e) {
-            console.warn(e);
+    if(!bnetPath) {
+        if (isWin32) {
+            try {
+                let buf = childProc.execSync('reg QUERY HKEY_CLASSES_ROOT\\battlenet\\shell\\open\\command /ve');
+                let match = buf && buf.toString().match(/\(.+\)[ \t]+REG_SZ[ \t]+"?(.*battle.net.exe.*)"? "%1".*/i)
+                console.log(buf, match)
+                bnetPath = match && path.dirname(match[1].trim());
+                if (bnetPath) console.log('find BNPath from registry', bnetPath);
+            } catch (e) {
+                console.warn(e);
+            }
+        } else {
+            bnetPath = "/Applications";
         }
+        if (!_isBNetPathVaid(bnetPath)) bnetPath = undefined;
     }
-
 
     if (!bnetPath) {
         while (true) {
