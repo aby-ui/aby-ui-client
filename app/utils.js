@@ -87,6 +87,8 @@ function download(url, dest, options) {
                         file.write(chunk)
                     })
 
+                    res.on('error', e => rejectRevertDownloaded({error: e, reason: 'response-error', url: url}));
+                    res.on('aborted', e => rejectRevertDownloaded({error: e, reason: 'response-aborted', url: url}));
                     res.on('end', () => file.end())
                     file.on('finish', () => resolve(url));
                 })

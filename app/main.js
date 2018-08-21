@@ -6,10 +6,12 @@ const {app, BrowserWindow, Menu, Tray, dialog, Notification, ipcMain, shell} = r
 const path = require('path'), fs = require('fs-extra'), childProc = require('child_process')
 
 
-let status = {}
-
+let status = {};
+let exiting = false;
 process.on('uncaughtException', function (error) {
     // Handle the error
+    if(exiting) return;
+    exiting = true;
     dialog.showErrorBox("出现错误，程序退出", error.stack || "");
     process.exit(-2);
 })
